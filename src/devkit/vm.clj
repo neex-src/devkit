@@ -44,11 +44,23 @@
   "True when podman talks to a podman machine (a Mac, or Linux with a machine)."
   [] (boolean (some-> (out "podman" "machine" "list" "--format" "{{.Name}}") not-empty)))
 
+(declare ensure-subids!)
 (defn ensure-podman! []
   (when-not (out "podman" "info")
     (if (machine?)
       (do (println "starting podman machine") (sh "podman" "machine" "start"))
-      (throw (ex-info "podman does not answer" {})))))
+      (throw (ex-info "podman does not answer" {}))))
+  (ensure-subids!))
+
+(defn ensure-subids!
+  "A podman machine whose user has no subuid range can map only one user into a
+  container, so image layers with other owners cannot be unpacked. Give it a range."
+  []
+  (when (machine?)
+    (let [m (out "podman" "machine" "ssh" "podman unshare cat /proc/self/uid_map")]
+      (when (and m (= 1 (count (str/split-lines m))))
+        (println "podman machine has no subuid range; adding one")
+        (sh "podman" "machine" "ssh" "sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $(id -un); podman system migrate")))))
 
 (defn sha256 [f]
   (let [md (MessageDigest/getInstance "SHA-256")]
