@@ -86,19 +86,19 @@
                                xml (or (plugin-xml zip) (throw (ex-info (str name ": no plugin.xml in " zip) {})))
                                out (str artifacts "/" (fs/file-name zip))]
                            (fs/copy zip out)
-                           {:name name
-                            :file (str (fs/file-name zip))
-                            :plugin-id (text xml "id")
-                            :version (text xml "version")
-                            :sha256 (sha256 out)
-                            :size (fs/size out)
-                            :source-sha head
-                            :source-tree (mono/git src "rev-parse" (str "HEAD:" dir))
-                            :since-build (attr xml "idea-version" "since-build")
-                            :until-build (attr xml "idea-version" "until-build")
-                            :vendor-email (attr xml "vendor" "email")}))))]
+                           (array-map :name name
+                                       :file (str (fs/file-name zip))
+                                       :plugin-id (text xml "id")
+                                       :version (text xml "version")
+                                       :sha256 (sha256 out)
+                                       :size (fs/size out)
+                                       :source-sha head
+                                       :source-tree (mono/git src "rev-parse" (str "HEAD:" dir))
+                                       :since-build (attr xml "idea-version" "since-build")
+                                       :until-build (attr xml "idea-version" "until-build")
+                                       :vendor-email (attr xml "vendor" "email"))))))]
           (spit (str artifacts "/manifest.edn")
-                (with-out-str (pp/pprint {:format 1 :built-at (str (java.time.Instant/now)) :source-sha head :plugins entries})))
+                (with-out-str (pp/pprint (array-map :format 1 :built-at (str (java.time.Instant/now)) :source-sha head :plugins entries))))
           (println "\nmanifest:\n" (slurp (str artifacts "/manifest.edn")))
           (spit done "0\n")))
       (catch Throwable t
