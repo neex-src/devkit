@@ -106,7 +106,7 @@
         tar (idea-tarball!)]
     (when (empty? zips) (throw (ex-info (str "no plugin zips in " plugins) {})))
     (fs/delete-tree ctx)
-    (fs/create-dirs (str ctx "/plugins") (str ctx "/ca") ca-dir)
+    (doseq [d [(str ctx "/plugins") (str ctx "/ca") ca-dir]] (fs/create-dirs d))
     (fs/copy (str root "/image/Containerfile") ctx)
     (fs/copy-tree (str root "/image/files") (str ctx "/files"))
     (doseq [z zips] (fs/unzip z (str ctx "/plugins")))
