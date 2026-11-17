@@ -1,0 +1,10 @@
+#!/usr/local/bin/bb
+;; Copies every *.pem in /ca into the system trust anchors and rebuilds the
+;; store. Arch's update-ca-trust also regenerates the Java cacerts that the
+;; system JDK and IntelliJ's bundled JBR both point at.
+(require '[babashka.fs :as fs] '[babashka.process :refer [shell]])
+(let [pems (fs/glob "/ca" "*.pem")]
+  (doseq [p pems]
+    (fs/copy p (fs/path "/etc/ca-certificates/trust-source/anchors" (str (fs/file-name p))) {:replace-existing true}))
+  (shell "update-ca-trust")
+  (println "devkit-ca:" (count pems) "pem(s) installed"))

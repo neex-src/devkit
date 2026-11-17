@@ -1,0 +1,54 @@
+# Dev VM: Arch Linux with systemd as PID 1, IntelliJ shown through xpra HTML5.
+# Built by `bb vm:build` from a context assembled in .scratch/ctx.
+ARG BASE
+FROM ${BASE}
+
+ENV container=podman LANG=en_US.UTF-8
+
+# Corporate CAs first, so every download below works behind a TLS proxy.
+COPY ca/ /etc/ca-certificates/trust-source/anchors/
+RUN set -e; \
+    pacman-key --init; pacman-key --populate; \
+    update-ca-trust; \
+    sed -i 's/^#\?DisableSandbox.*//; s/^\[options\]/[options]\nDisableSandbox/' /etc/pacman.conf || true; \
+    sed -i 's/^#\(ParallelDownloads\).*/\1 5/' /etc/pacman.conf; \
+    (pacman -Syu --noconfirm || (sed -i '/^DisableSandbox/d' /etc/pacman.conf && pacman -Syu --noconfirm))
+
+RUN pacman -S --noconfirm --needed \
+      systemd sudo git github-cli jdk21-openjdk clojure terraform podman \
+      xpra xorg-server-xvfb xorg-xauth xorg-xkbcomp xkeyboard-config xdotool \
+      python-numpy python-cryptography python-dbus openbox \
+      ttf-dejavu noto-fonts fontconfig libxtst libxi libxrender libxrandr libxkbfile alsa-lib \
+      curl wget unzip tar vim procps-ng iproute2 bind \
+    && pacman -Scc --noconfirm
+
+RUN set -e; \
+    case "$(uname -m)" in aarch64) A=aarch64;; x86_64) A=amd64;; esac; \
+    V=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/babashka/babashka/releases/latest | sed 's|.*/v||'); \
+    curl -fsSL "https://github.com/babashka/babashka/releases/download/v${V}/babashka-${V}-linux-${A}-static.tar.gz" | tar -xz -C /usr/local/bin bb; \
+    ln -sf /usr/bin/podman-remote /usr/local/bin/podman; ln -sf /usr/bin/podman-remote /usr/local/bin/docker
+
+RUN set -e; \
+    echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen; locale-gen; echo 'LANG=en_US.UTF-8' > /etc/locale.conf; \
+    useradd -m -u 1000 -s /bin/bash dev; \
+    echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev; \
+    mkdir -p /work /ca && chown dev:dev /work
+
+# IntelliJ IDEA (tarball downloaded and verified by bb vm:build)
+RUN --mount=type=bind,source=idea.tar.gz,target=/ctx/idea.tar.gz \
+    mkdir -p /opt/idea && tar -xzf /ctx/idea.tar.gz -C /opt/idea --strip-components=1
+COPY plugins/ /opt/idea/plugins/
+# The IDE's bundled JBR uses the system trust store (update-ca-trust refreshes it).
+RUN ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts; \
+    ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts
+
+COPY files/ /
+RUN set -e; chmod 755 /usr/local/bin/devkit-ca; \
+    systemctl enable xpra.service idea.service devkit-ca.service; \
+    systemctl mask getty.target console-getty.service systemd-logind.service systemd-networkd-wait-online.service \
+      systemd-resolved.service systemd-networkd.service systemd-timesyncd.service systemd-firstboot.service; \
+    mkdir -p /run/devkit; chown -R dev:dev /home/dev
+
+STOPSIGNAL SIGRTMIN+3
+EXPOSE 14500
+CMD ["/usr/lib/systemd/systemd"]

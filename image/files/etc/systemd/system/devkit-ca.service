@@ -1,0 +1,11 @@
+[Unit]
+Description=Install corporate CAs from /ca into the system trust store
+Before=idea.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/devkit-ca
+
+[Install]
+WantedBy=multi-user.target
