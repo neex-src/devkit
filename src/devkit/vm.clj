@@ -108,11 +108,20 @@
       (when-not (= want (sha256 f)) (fs/delete f) (throw (ex-info "IDEA sha256 mismatch" {:want want}))))
     f))
 
+(defn plugins-dir
+  "Where the plugin zips come from: --plugins, $DEVKIT_PLUGINS, .scratch/artifacts (the monorepo build's
+  output, with manifest.edn), else .scratch/plugins."
+  [args]
+  (or (opt args "--plugins" nil)
+      (System/getenv "DEVKIT_PLUGINS")
+      (let [a (str root "/.scratch/artifacts")] (when (seq (fs/glob a "*.zip")) a))
+      (str root "/.scratch/plugins")))
+
 (defn build!
   "Assemble .scratch/ctx (Containerfile, files, plugins, CAs, IDE tarball) and build the image."
   [args]
   (ensure-podman!)
-  (let [plugins (opt args "--plugins" (or (System/getenv "DEVKIT_PLUGINS") (str root "/.scratch/plugins")))
+  (let [plugins (plugins-dir args)
         zips (fs/glob plugins "*.zip")
         base (base-image!)
         tar (idea-tarball!)]
@@ -121,7 +130,7 @@
     (doseq [d [(str ctx "/plugins") (str ctx "/ca") ca-dir]] (fs/create-dirs d))
     (fs/copy (str root "/image/Containerfile") ctx)
     (fs/copy-tree (str root "/image/files") (str ctx "/files"))
-    (doseq [z zips] (fs/unzip z (str ctx "/plugins")))
+    (doseq [z zips] (println "plugin" (str (fs/file-name z)) "from" (str plugins)) (fs/unzip z (str ctx "/plugins")))
     (doseq [c (fs/glob ca-dir "*.pem")] (fs/copy c (str ctx "/ca")))
     (spit (str ctx "/ca/.keep") "")
     (fs/create-link (str ctx "/idea.tar.gz") tar)
@@ -146,17 +155,16 @@
   (when-not (out "podman" "image" "exists" image) (throw (ex-info "no image; run bb vm:build" {})))
   (let [work (str (fs/canonicalize (fs/create-dirs (opt args "--work" default-work))))]
     (fs/create-dirs ca-dir)
-    (when-not (out "podman" "network" "exists" network) (sh "podman" "network" "create" network))
     (when-not (running?)
       (out "podman" "rm" "-f" container)
       (sh "podman" "run" "-d" "--name" container "--hostname" "devkit"
           "--systemd=always" "--userns=keep-id:uid=1000,gid=1000" "--user" "root"
-          "--security-opt" "label=disable" "--shm-size" "1g" "--network" network
+          "--security-opt" "label=disable" "--shm-size" "1g" "--network" "pasta:-T,4566,-T,5432,-T,8000-8999"
           "-p" (str "127.0.0.1:" port ":" port)
           "-v" (str home-volume ":/home/dev")
           "-v" (str work ":/work")
           "-v" (str ca-dir ":/ca:ro")
-          "-v" (str (socket-path) ":/run/host-podman.sock")
+          "-v" (str (socket-path) ":/run/user/1000/podman/podman.sock")
           image))
     (println "waiting for the GUI")
     (loop [i 0]
@@ -176,7 +184,8 @@
   (if (running?)
     (do (println "RUNNING" (url))
         (println (out "podman" "exec" container "systemctl" "is-active" "xpra" "idea" "devkit-ca"))
-        (println "memory:" (out "podman" "stats" "--no-stream" "--format" "{{.MemUsage}}" container)))
+        (println "memory:" (out "podman" "stats" "--no-stream" "--format" "{{.MemUsage}}" container))
+        (println "work:" (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/work\"}}{{.Source}}{{end}}{{end}}" container) "-> /work in the VM"))
     (println "STOPPED")))
 
 (defn shell! []

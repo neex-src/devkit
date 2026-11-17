@@ -6,7 +6,7 @@ Wants=xpra.service
 [Service]
 User=dev
 WorkingDirectory=/work
-Environment=HOME=/home/dev DISPLAY=:100 JAVA_HOME=/usr/lib/jvm/java-25-openjdk CONTAINER_HOST=unix:///run/host-podman.sock
+Environment=HOME=/home/dev DISPLAY=:100 JAVA_HOME=/usr/lib/jvm/java-25-openjdk XDG_RUNTIME_DIR=/run/user/1000 DELIBERATOR_HOME=~/.deliberator
 ExecStartPre=/bin/sh -c 'for i in $(seq 60); do xdotool getdisplaygeometry >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
 ExecStart=/opt/idea/bin/idea.sh
 Restart=always
