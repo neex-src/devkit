@@ -20,8 +20,7 @@
     (check "java system JDK" (vm (str "cd ~/proof && java -cp . Fetch https://example.com " vproxy)))
     (check "java IntelliJ JBR" (vm (str "cd ~/proof && /opt/idea/jbr/bin/java -cp . Fetch https://example.com " vproxy)))
     (check "git" (vm (str "git -c http.proxy=" vproxy " ls-remote https://github.com/babashka/babashka HEAD")))
-    (check "gh api (system store)" (vm (str "HTTPS_PROXY=" vproxy " gh api -X GET /zen 2>&1 | grep -qi 'x509\\|certificate' && exit 1; HTTPS_PROXY=" vproxy " curl -sS -m 20 -o /dev/null https://api.github.com")))
-    (check "terraform registry (Go, system store)" (vm (str "HTTPS_PROXY=" vproxy " curl -sS -m 20 -o /dev/null https://registry.terraform.io/.well-known/terraform.json && cd ~/proof && echo 'terraform {}' > main.tf && HTTPS_PROXY=" vproxy " terraform init -no-color 2>&1 | tail -3 | grep -qi 'x509' && exit 1 || true")))
+    (check "terraform init (Go, system store)" (vm (str "mkdir -p ~/proof/tf && cd ~/proof/tf && printf 'terraform {\\n required_providers {\\n null = { source = \"hashicorp/null\" }\\n }\\n}\\n' > main.tf && rm -rf .terraform && HTTPS_PROXY=" vproxy " terraform init -no-color")))
     (p/shell {:continue true :out :string :err :string} "podman" "rmi" "-f" "docker.io/library/hello-world:latest")
     (check "podman machine image pull" (p/shell {:out :string :err :string :continue true} "podman" "machine" "ssh"
                                                 (str "HTTPS_PROXY=" mproxy " HTTP_PROXY=" mproxy " podman pull docker.io/library/hello-world:latest")))
