@@ -139,7 +139,7 @@
 (defn socket-path
   "Path of the podman API socket as seen by the machine (or the Linux host)."
   []
-  (let [s (out "podman" "info" "--format" "{{.Host.RemoteSocket.Path}}")]
+  (let [s (str/replace (out "podman" "info" "--format" "{{.Host.RemoteSocket.Path}}") #"^unix://" "")]
     (when (and (not (machine?)) (str/starts-with? s "/run/user"))
       (out "systemctl" "--user" "start" "podman.socket"))
     s))
