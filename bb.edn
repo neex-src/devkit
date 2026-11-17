@@ -7,5 +7,5 @@
                    :task (release/collect! *command-line-args*)}
   release:run {:doc "(inside the tmux window) the builds themselves"
                :task (release/run! *command-line-args*)}
-  release:publish {:doc "Print (do not run) the gh release create commands. Opts: --org ORG (required) --repo NAME (default devkit) --tag TAG"
+  release:publish {:doc "Print (do not run) the gh release create commands. Opts: --org ORG (required) --name REPO (default devkit) --tag TAG"
                    :task (release/publish! *command-line-args*)}}}

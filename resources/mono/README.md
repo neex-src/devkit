@@ -11,11 +11,11 @@ Each folder was its own repo. Its history is kept: `git log -- reus/` and `git b
 
 ## Folders
 
-- `deliberator/` - the deliberator tool and its IntelliJ plugin (`deliberator/ide`).
+- `deliberator/` - IntelliJ plugin (`deliberator/ide`) and a daemon + CLI to deliberate a microservice and event-driven AWS estate: environments, scenarios, runs. Start with `deliberator/README.md`.
 - `inliner/` - IntelliJ plugin: read a called method inline, under the call.
-- `reus/` - records what Claude Code does in a session (hooks and a worker) so you can replay it.
+- `reus/` - records everything an AI coding agent (Claude Code, Copilot) does as git commits in one extra repo, so you can look at every step.
 - `ashamer/` - function-level git history for Clojure repos.
-- `sling/` - "sling": a local stand-in for Ping, to try things without the real service.
+- `sling/` - "sling": a fake Ping tenant on one port, same URLs as the real one, to try things without the real service.
 - `bb.edn`, `src/`, `image/` - the dev VM (podman container with IntelliJ in the browser).
 
 ## Start
