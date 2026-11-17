@@ -7,10 +7,13 @@ Wants=xpra.service
 User=dev
 WorkingDirectory=/work
 Environment=HOME=/home/dev DISPLAY=:100 JAVA_HOME=/usr/lib/jvm/java-25-openjdk XDG_RUNTIME_DIR=/run/user/1000 DELIBERATOR_HOME=~/.deliberator
-ExecStartPre=/bin/sh -c 'for i in $(seq 60); do xdotool getdisplaygeometry >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
+# The image's plugins are linked into the IDE's user plugin dir (the home is a volume) at every start.
+ExecStartPre=/bin/sh -c 'mkdir -p ~/.local/share/JetBrains/IntelliJIdea2026.3 && for d in /opt/devkit/plugins/*; do ln -sfn $$d ~/.local/share/JetBrains/IntelliJIdea2026.3/; done'
+ExecStartPre=/bin/sh -c 'for i in $$(seq 60); do xdotool getdisplaygeometry >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
 ExecStart=/opt/idea/bin/idea.sh
 Restart=always
 RestartSec=3
+TimeoutStopSec=60
 
 [Install]
 WantedBy=multi-user.target

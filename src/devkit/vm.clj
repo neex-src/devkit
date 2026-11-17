@@ -14,7 +14,6 @@
 (def cache (str root "/.scratch/cache"))
 (def ctx (str root "/.scratch/ctx"))
 (def ca-dir (str root "/.scratch/ca"))
-(def default-work (str root "/.scratch/work"))
 
 (def container "devkit")
 (def image "localhost/devkit:latest")
@@ -148,12 +147,17 @@
 
 (defn url [] (str "http://127.0.0.1:" port "/"))
 
+(def repos-mount "/repos")
+(def default-repos (str root "/.scratch/repos"))
+(def work-volume "devkit-work")
+
 (defn up!
   "Start the VM (home volume, work folder, CA folder, host podman socket) and wait for the GUI."
   [args]
   (ensure-podman!)
   (when-not (out "podman" "image" "exists" image) (throw (ex-info "no image; run bb vm:build" {})))
-  (let [work (str (fs/canonicalize (fs/create-dirs (opt args "--work" default-work))))]
+  (let [work (if-let [w (opt args "--work" nil)] (str (fs/canonicalize (fs/create-dirs w))) work-volume)
+        repos (str (fs/canonicalize (fs/create-dirs (opt args "--repos" default-repos))))]
     (fs/create-dirs ca-dir)
     (when-not (running?)
       (out "podman" "rm" "-f" container)
@@ -163,6 +167,7 @@
           "-p" (str "127.0.0.1:" port ":" port)
           "-v" (str home-volume ":/home/dev")
           "-v" (str work ":/work")
+          "-v" (str repos ":" repos-mount)
           "-v" (str ca-dir ":/ca:ro")
           "-v" (str (socket-path) ":/run/user/1000/podman/podman.sock")
           image))
@@ -185,7 +190,8 @@
     (do (println "RUNNING" (url))
         (println (out "podman" "exec" container "systemctl" "is-active" "xpra" "idea" "devkit-ca"))
         (println "memory:" (out "podman" "stats" "--no-stream" "--format" "{{.MemUsage}}" container))
-        (println "work:" (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/work\"}}{{.Source}}{{end}}{{end}}" container) "-> /work in the VM"))
+        (println "work: " (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/work\"}}{{.Name}}{{.Source}}{{end}}{{end}}" container) "-> /work in the VM")
+        (println "repos:" (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/repos\"}}{{.Source}}{{end}}{{end}}" container) "-> /repos in the VM (bare repos, NAME.git)"))
     (println "STOPPED")))
 
 (defn shell! []
@@ -195,26 +201,55 @@
   (apply sh "podman" "exec" container "journalctl" "-u" "idea" "-u" "xpra" "-u" "devkit-ca" "-n" "200" "--no-pager"
          (when (some #{"-f"} args) ["-f"])))
 
+(defn- pem-files
+  "The PEM/CRT files named by the arguments: a file, or every .pem/.crt/.cer in a folder."
+  [paths]
+  (vec (distinct (mapcat (fn [p] (cond (fs/directory? p) (filter #(re-find #"(?i)\\.(pem|crt|cer)$" (str %)) (fs/list-dir p))
+                                       (fs/exists? p) [(fs/path p)]
+                                       :else (throw (ex-info (str "no such file: " p) {}))))
+                         paths))))
+
 (defn ca-install!
-  "Install a corporate root CA (PEM): keep it in .scratch/ca (mounted at /ca and baked
-  into the next build), put it in the podman machine's trust store so image pulls work,
-  and re-run devkit-ca in a running VM."
+  "Install corporate root CAs given as PEM files (or folders of them). Only the paths given are read;
+  the macOS keychain is never touched. Each is kept in .scratch/ca (mounted at /ca, baked into the next
+  build), put in the podman machine's trust store so image pulls work, and installed in a running VM by
+  devkit-ca (system store, and so every Java store). Files already installed unchanged are skipped."
   [args]
-  (let [f (first args)]
-    (when-not (and f (fs/exists? f)) (throw (ex-info "usage: bb ca:install FILE.pem" {})))
+  (let [files (pem-files args)]
+    (when (empty? files) (throw (ex-info "usage: bb ca:install FILE.pem|DIR ..." {})))
     (ensure-podman!)
-    (let [name (str (fs/file-name f))
-          name (if (str/ends-with? name ".pem") name (str name ".pem"))]
-      (fs/create-dirs ca-dir)
-      (fs/copy f (str ca-dir "/" name) {:replace-existing true})
-      (println "kept as" (str ca-dir "/" name))
-      (if (machine?)
-        (do (-> (p/process {:in (fs/file f) :inherit :err :out :inherit}
-                           "podman" "machine" "ssh" (str "sudo tee /etc/pki/ca-trust/source/anchors/" name " >/dev/null"))
-                p/check)
-            (sh "podman" "machine" "ssh" "sudo update-ca-trust; systemctl --user stop podman.service podman.socket; systemctl --user start podman.socket; true")
-            (println "podman machine trusts it"))
-        (println "no podman machine: this host's own trust store is used for pulls; add the CA there if pulls fail"))
-      (when (running?)
-        (sh "podman" "exec" container "systemctl" "restart" "devkit-ca")
-        (println "running VM updated")))))
+    (fs/create-dirs ca-dir)
+    (let [changed (doall
+                    (for [f files
+                          :let [txt (slurp (str f))
+                                base (str/replace (str (fs/file-name f)) #"(?i)\\.(pem|crt|cer)$" "")
+                                dest (str ca-dir "/" base ".pem")]
+                          :when (do (when-not (str/includes? txt "-----BEGIN CERTIFICATE-----")
+                                      (throw (ex-info (str f " is not a PEM certificate") {})))
+                                    (not (and (fs/exists? dest) (= txt (slurp dest)))))]
+                      (do (spit dest txt) {:name (str base ".pem") :dest dest})))]
+      (if (empty? changed)
+        (println "nothing new: all" (count files) "file(s) already installed")
+        (do (doseq [{:keys [name dest]} changed]
+              (println "kept" dest)
+              (when (machine?)
+                (-> (p/process {:in (fs/file dest) :inherit :err :out :inherit}
+                               "podman" "machine" "ssh" (str "sudo tee /etc/pki/ca-trust/source/anchors/" name " >/dev/null"))
+                    p/check)))
+            (if (machine?)
+              (do (sh "podman" "machine" "ssh" "sudo update-ca-trust; systemctl --user stop podman.service podman.socket; systemctl --user start podman.socket; true")
+                  (println "podman machine trusts them"))
+              (println "no podman machine: this host's own trust store is used for pulls; add the CAs there if pulls fail"))
+            (when (running?)
+              (sh "podman" "exec" container "systemctl" "restart" "devkit-ca")
+              (println "running VM updated")))))))
+
+(defn checkout!
+  "Make the working copy /work/NAME from the bare repository /repos/NAME.git (its origin) unless it exists."
+  [name]
+  (when-not (running?) (throw (ex-info "the VM is not running" {})))
+  (let [r (p/shell {:continue true :out :string :err :string} "podman" "exec" "-u" "dev" container "bash" "-lc"
+                   (str "cd /work && if [ -d '" name "/.git' ]; then echo 'already there: /work/" name "'; "
+                        "else git clone /repos/" name ".git " name " && echo 'cloned /repos/" name ".git to /work/" name "'; fi"))]
+    (print (:out r) (:err r)) (flush)
+    (when-not (zero? (:exit r)) (throw (ex-info "checkout failed" {})))))

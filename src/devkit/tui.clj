@@ -37,7 +37,8 @@
    ["Shell in the VM" #(vm/shell!)]
    ["Logs" #(vm/logs! [])]
    ["Open in the browser" open-browser!]
-   ["Install a corporate CA (PEM file)" #(when-let [f (not-empty (ask "path to the .pem file: "))] (vm/ca-install! [f]))]
+   ["Checkout a repository into /work" #(when-let [n (not-empty (ask "repository name (/repos/NAME.git): "))] (vm/checkout! n))]
+   ["Install corporate CAs (PEM files or a folder)" #(when-let [f (not-empty (ask "paths, separated by spaces: "))] (vm/ca-install! (str/split f #"\s+")))]
    ["Quit" nil]])
 
 (defn- render [s sel msg]

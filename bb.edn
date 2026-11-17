@@ -3,9 +3,10 @@
  {:requires ([devkit.vm :as vm] [devkit.tui :as tui])
   vm        {:doc "Menu: state and actions" :task (tui/run!)}
   vm:build   {:doc "Build the dev VM image. Opts: --plugins DIR (zips of IDE plugins)" :task (vm/build! *command-line-args*)}
-  vm:up      {:doc "Start the dev VM and print its URL. Opts: --work DIR" :task (vm/up! *command-line-args*)}
+  vm:up      {:doc "Start the dev VM and print its URL. Opts: --work DIR (bind a host folder as /work), --repos DIR (bare repos, mounted at /repos)" :task (vm/up! *command-line-args*)}
   vm:down    {:doc "Stop and remove the dev VM (volumes stay)" :task (vm/down!)}
+  vm:checkout {:doc "Working copy /work/NAME from /repos/NAME.git" :task (vm/checkout! (first *command-line-args*))}
   vm:status  {:doc "Show state, URL, memory" :task (vm/status!)}
   vm:shell   {:doc "Shell as user dev inside the VM" :task (vm/shell!)}
   vm:logs    {:doc "Journal of the IDE and xpra units. Opt: -f" :task (vm/logs! *command-line-args*)}
-  ca:install {:doc "Install a corporate root CA (PEM): podman machine, image trust, Java stores" :task (vm/ca-install! *command-line-args*)}}}
+  ca:install {:doc "Install corporate root CAs, FILE.pem or a folder, one or more: podman machine, image trust, Java stores" :task (vm/ca-install! *command-line-args*)}}}

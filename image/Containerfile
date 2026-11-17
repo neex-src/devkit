@@ -15,7 +15,7 @@ RUN set -e; \
     (pacman -Syu --noconfirm || (sed -i '/^DisableSandbox/d' /etc/pacman.conf && pacman -Syu --noconfirm))
 
 RUN pacman -S --noconfirm --needed \
-      systemd sudo git github-cli jdk25-openjdk maven clojure terraform podman \
+      systemd sudo git jdk25-openjdk maven clojure terraform podman \
       xpra xorg-server-xvfb xorg-xauth xorg-xkbcomp xkeyboard-config xdotool \
       python-numpy python-cryptography python-dbus openbox \
       ttf-dejavu noto-fonts fontconfig libxtst libxi libxrender libxrandr libxkbfile alsa-lib \
@@ -44,7 +44,8 @@ RUN set -e; \
 # IntelliJ IDEA (tarball downloaded and verified by bb vm:build)
 RUN --mount=type=bind,source=idea.tar.gz,target=/ctx/idea.tar.gz \
     mkdir -p /opt/idea && tar -xzf /ctx/idea.tar.gz -C /opt/idea --strip-components=1
-COPY plugins/ /opt/idea/plugins/
+# Plugins: the IDE copies them into its user plugin dir at every start (the home is a volume)
+COPY plugins/ /opt/devkit/plugins/
 # The IDE's bundled JBR uses the system trust store (update-ca-trust refreshes it).
 RUN ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts; \
     ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts
