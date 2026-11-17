@@ -15,12 +15,18 @@ RUN set -e; \
     (pacman -Syu --noconfirm || (sed -i '/^DisableSandbox/d' /etc/pacman.conf && pacman -Syu --noconfirm))
 
 RUN pacman -S --noconfirm --needed \
-      systemd sudo git github-cli jdk21-openjdk clojure terraform podman \
+      systemd sudo git github-cli jdk25-openjdk maven clojure terraform podman \
       xpra xorg-server-xvfb xorg-xauth xorg-xkbcomp xkeyboard-config xdotool \
       python-numpy python-cryptography python-dbus openbox \
       ttf-dejavu noto-fonts fontconfig libxtst libxi libxrender libxrandr libxkbfile alsa-lib \
-      curl wget unzip tar vim procps-ng iproute2 bind \
+      curl unzip tar tmux htop tree neovim less ripgrep jq openssh procps-ng iproute2 \
     && pacman -Scc --noconfirm
+
+# xpra HTML5 client (no Arch package)
+RUN set -e; mkdir -p /usr/share/xpra/www /opt/h5; cd /opt/h5; \
+    V=$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/Xpra-org/xpra-html5/releases/latest | sed "s,.*/tag/,,"); \
+    curl -fsSL https://github.com/Xpra-org/xpra-html5/archive/refs/tags/$V.tar.gz | tar xz; \
+    cp -r xpra-html5-*/html5/. /usr/share/xpra/www/; cd /; rm -rf /opt/h5
 
 RUN set -e; \
     case "$(uname -m)" in aarch64) A=aarch64;; x86_64) A=amd64;; esac; \
