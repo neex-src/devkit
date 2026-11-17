@@ -1,6 +1,7 @@
 {:paths ["src"]
  :tasks
- {:requires ([devkit.vm :as vm])
+ {:requires ([devkit.vm :as vm] [devkit.tui :as tui])
+  vm        {:doc "Menu: state and actions" :task (tui/run!)}
   vm:build   {:doc "Build the dev VM image. Opts: --plugins DIR (zips of IDE plugins)" :task (vm/build! *command-line-args*)}
   vm:up      {:doc "Start the dev VM and print its URL. Opts: --work DIR" :task (vm/up! *command-line-args*)}
   vm:down    {:doc "Stop and remove the dev VM (volumes stay)" :task (vm/down!)}
