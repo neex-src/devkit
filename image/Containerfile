@@ -1,0 +1,62 @@
+# Dev VM: Arch Linux with systemd as PID 1, IntelliJ shown through xpra HTML5.
+# Built by `bb vm:build` from a context assembled in .scratch/ctx.
+ARG BASE
+FROM ${BASE}
+
+ENV container=podman LANG=en_US.UTF-8
+
+# Corporate CAs first, so every download below works behind a TLS proxy.
+COPY ca/ /etc/ca-certificates/trust-source/anchors/
+RUN set -e; \
+    pacman-key --init; pacman-key --populate; \
+    update-ca-trust; \
+    sed -i 's/^#\?DisableSandbox.*//; s/^\[options\]/[options]\nDisableSandbox/' /etc/pacman.conf || true; \
+    sed -i 's/^#\(ParallelDownloads\).*/\1 5/' /etc/pacman.conf; \
+    (pacman -Syu --noconfirm || (sed -i '/^DisableSandbox/d' /etc/pacman.conf && pacman -Syu --noconfirm))
+
+RUN pacman -S --noconfirm --needed \
+      systemd sudo git jdk25-openjdk maven clojure terraform podman \
+      xpra xorg-server-xvfb xorg-xauth xorg-xkbcomp xkeyboard-config xdotool \
+      python-numpy python-cryptography python-dbus openbox \
+      ttf-dejavu noto-fonts fontconfig libxtst libxi libxrender libxrandr libxkbfile alsa-lib \
+      curl unzip tar tmux htop tree neovim less ripgrep jq openssh procps-ng iproute2 \
+    && pacman -Scc --noconfirm
+
+# xpra HTML5 client (no Arch package)
+RUN set -e; mkdir -p /usr/share/xpra/www /opt/h5; cd /opt/h5; \
+    V=$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/Xpra-org/xpra-html5/releases/latest | sed "s,.*/tag/,,"); \
+    curl -fsSL https://github.com/Xpra-org/xpra-html5/archive/refs/tags/$V.tar.gz | tar xz; \
+    cp -r xpra-html5-*/html5/. /usr/share/xpra/www/; cd /; rm -rf /opt/h5
+
+RUN set -e; \
+    case "$(uname -m)" in aarch64) A=aarch64;; x86_64) A=amd64;; esac; \
+    V=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/babashka/babashka/releases/latest | sed 's|.*/v||'); \
+    curl -fsSL "https://github.com/babashka/babashka/releases/download/v${V}/babashka-${V}-linux-${A}-static.tar.gz" | tar -xz -C /usr/local/bin bb; \
+    ln -sf /usr/bin/podman-remote /usr/local/bin/podman; ln -sf /usr/bin/podman-remote /usr/local/bin/docker
+
+RUN set -e; \
+    echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen; locale-gen; echo 'LANG=en_US.UTF-8' > /etc/locale.conf; \
+    (userdel -rf alarm; groupdel alarm) 2>/dev/null || true; \
+    useradd -m -u 1000 -s /bin/bash dev; \
+    echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev; \
+    mkdir -p /work /ca && chown dev:dev /work
+
+# IntelliJ IDEA (tarball downloaded and verified by bb vm:build)
+RUN --mount=type=bind,source=idea.tar.gz,target=/ctx/idea.tar.gz \
+    mkdir -p /opt/idea && tar -xzf /ctx/idea.tar.gz -C /opt/idea --strip-components=1
+# Plugins: the IDE copies them into its user plugin dir at every start (the home is a volume)
+COPY plugins/ /opt/devkit/plugins/
+# The IDE's bundled JBR uses the system trust store (update-ca-trust refreshes it).
+RUN ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts; \
+    ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts
+
+COPY files/ /
+RUN set -e; chmod 755 /usr/local/bin/devkit-ca; \
+    systemctl enable xpra.service idea.service devkit-ca.service; \
+    systemctl mask getty.target console-getty.service systemd-logind.service systemd-networkd-wait-online.service \
+      systemd-resolved.service systemd-networkd.service systemd-timesyncd.service systemd-firstboot.service; \
+    mkdir -p /run/devkit; chown -R dev:dev /home/dev
+
+STOPSIGNAL SIGRTMIN+3
+EXPOSE 14500
+CMD ["/usr/lib/systemd/systemd"]

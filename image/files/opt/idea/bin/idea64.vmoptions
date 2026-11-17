@@ -1,0 +1,5 @@
+-Xmx3g
+-Dide.browser.jcef.enabled=false
+-Dide.show.tips.on.startup.default.value=false
+-Dsun.java2d.xrender=false
+-Dawt.useSystemAAFontSettings=on
