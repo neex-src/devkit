@@ -63,7 +63,7 @@
   (fs/create-dirs (fs/parent file))
   (when-not (fs/exists? file)
     (let [part (str file ".part")]
-      (sh "curl" "-fL" "--retry" "5" "-C" "-" "-o" part url)
+      (sh "curl" "-fL" "--no-progress-meter" "--retry" "5" "-C" "-" "-o" part url)
       (fs/move part file))))
 
 (defn base-image!
