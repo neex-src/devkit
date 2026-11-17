@@ -204,7 +204,7 @@
 (defn- pem-files
   "The PEM/CRT files named by the arguments: a file, or every .pem/.crt/.cer in a folder."
   [paths]
-  (vec (distinct (mapcat (fn [p] (cond (fs/directory? p) (filter #(re-find #"(?i)\\.(pem|crt|cer)$" (str %)) (fs/list-dir p))
+  (vec (distinct (mapcat (fn [p] (cond (fs/directory? p) (filter #(re-find #"(?i)\.(pem|crt|cer)$" (str %)) (fs/list-dir p))
                                        (fs/exists? p) [(fs/path p)]
                                        :else (throw (ex-info (str "no such file: " p) {}))))
                          paths))))
@@ -222,7 +222,7 @@
     (let [changed (doall
                     (for [f files
                           :let [txt (slurp (str f))
-                                base (str/replace (str (fs/file-name f)) #"(?i)\\.(pem|crt|cer)$" "")
+                                base (str/replace (str (fs/file-name f)) #"(?i)\.(pem|crt|cer)$" "")
                                 dest (str ca-dir "/" base ".pem")]
                           :when (do (when-not (str/includes? txt "-----BEGIN CERTIFICATE-----")
                                       (throw (ex-info (str f " is not a PEM certificate") {})))
