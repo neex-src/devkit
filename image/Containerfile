@@ -36,6 +36,7 @@ RUN set -e; \
 
 RUN set -e; \
     echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen; locale-gen; echo 'LANG=en_US.UTF-8' > /etc/locale.conf; \
+    (userdel -rf alarm; groupdel alarm) 2>/dev/null || true; \
     useradd -m -u 1000 -s /bin/bash dev; \
     echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev; \
     mkdir -p /work /ca && chown dev:dev /work
