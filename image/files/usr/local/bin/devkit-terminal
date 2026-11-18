@@ -1,4 +1,9 @@
 #!/usr/local/bin/bb
+;; ONLY inside the dev VM. On any other machine this script would act on that machine's own programs
+;; (devkit-session ends window managers by name), so it stops at once unless podman's container mark is there.
+(when-not (.exists (java.io.File. "/run/.containerenv"))
+  (binding [*out* *err*] (println "this script runs inside the dev VM only"))
+  (System/exit 1))
 ;; The panel's terminal: a login shell in the work folder, by its real path (not the /work link), so a
 ;; tool started there hands the host's podman paths that exist on the host.
 (require '[babashka.process :as p] '[babashka.fs :as fs])

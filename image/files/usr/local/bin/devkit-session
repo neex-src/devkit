@@ -1,4 +1,9 @@
 #!/usr/local/bin/bb
+;; ONLY inside the dev VM. On any other machine this script would act on that machine's own programs
+;; (devkit-session ends window managers by name), so it stops at once unless podman's container mark is there.
+(when-not (.exists (java.io.File. "/run/.containerenv"))
+  (binding [*out* *err*] (println "this script runs inside the dev VM only"))
+  (System/exit 1))
 ;; The desktop on the xpra display, started by xpra as its child.
 ;; xfce (the default): a window manager with NO keyboard shortcuts, so every key reaches IntelliJ, and a
 ;; panel to start things with the mouse. i3: the author's tiling setup; it takes Alt+digits.
@@ -25,23 +30,25 @@
   "xsetroot -solid '#1e1f22'; xfsettingsd >/dev/null 2>&1 & xfce4-panel >/dev/null 2>&1 & exec xfwm4 --compositor=off")
 
 ;; IntelliJ's project window fills the screen (xfce does not tile). Each window once, so it can be made
-;; smaller by hand afterwards; dialogs and the Welcome window are left as they are.
+;; smaller by hand afterwards. Only a project window: IntelliJ gives it no window type, so it is told
+;; from the small ones (the agreement, Welcome, dialogs) by being wide, at least 60% of the screen.
 (future
   (loop [seen #{}]
     (Thread/sleep 2000)
-    (let [wins (for [l (str/split-lines (:out (quiet "wmctrl" "-lx")))
-                     :let [[id _ cls _ & title] (str/split (str/trim l) #"\s+")]
+    (let [screen (some-> (re-find #"^\d+" (str/trim (:out (quiet "xdotool" "getdisplaygeometry")))) parse-long)
+          wins (for [l (str/split-lines (:out (quiet "wmctrl" "-lGx")))
+                     :let [[id _ _ _ w _ cls _ & title] (str/split (str/trim l) #"\s+")]
                      :when (and cls (str/starts-with? cls "jetbrains-idea"))]
-                 [id (str/join " " title)])
-          fresh (remove (comp seen first) wins)]
-      (doseq [[id title] fresh
-              ;; a project window: IntelliJ gives it no window type at all; a dialog has one and belongs to a window
+                 {:id id :w (parse-long w) :title (str/join " " title)})
+          fresh (remove (comp seen :id) wins)
+          ;; a window just made may still be growing: look at it again next time unless it is wide already
+          wide (filter #(and screen (>= (:w %) (* 0.6 screen)) (not (str/starts-with? (:title %) "Welcome"))) fresh)]
+      (doseq [{:keys [id]} wide
               :let [props (:out (quiet "xprop" "-id" id "_NET_WM_WINDOW_TYPE" "WM_TRANSIENT_FOR"))]
-              :when (and (not (str/starts-with? title "Welcome"))
-                         (not (re-find #"_NET_WM_WINDOW_TYPE_(DIALOG|UTILITY|SPLASH|MENU|TOOLTIP|POPUP_MENU|DROPDOWN_MENU|NOTIFICATION)" props))
+              :when (and (not (re-find #"_NET_WM_WINDOW_TYPE_(DIALOG|UTILITY|SPLASH|MENU|TOOLTIP|POPUP_MENU|DROPDOWN_MENU|NOTIFICATION)" props))
                          (not (re-find #"WM_TRANSIENT_FOR\(WINDOW\)" props)))]
         (quiet "wmctrl" "-i" "-r" id "-b" "add,maximized_vert,maximized_horz"))
-      (recur (into seen (map first fresh))))))
+      (recur (into seen (map :id wide))))))
 
 (loop []
   (sweep)

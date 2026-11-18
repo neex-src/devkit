@@ -59,7 +59,9 @@ RUN pacman -Syu --noconfirm --needed \
     && archlinux-java set java-25-openjdk && pacman -Scc --noconfirm
 
 COPY files/ /
+# xpra's floating toolbar sits on the top left corner, over the windows' titles: off (add ?floating_menu=true to the URL for it)
 RUN set -e; chmod 755 /usr/local/bin/devkit-ca /usr/local/bin/devkit-boot /usr/local/bin/devkit-session /usr/local/bin/devkit-terminal; \
+    echo "floating_menu = false" >> /usr/share/xpra/www/default-settings.txt; \
     systemctl enable xpra.service idea.service devkit-ca.service devkit-boot.service; \
     systemctl mask getty.target console-getty.service systemd-logind.service systemd-networkd-wait-online.service \
       systemd-resolved.service systemd-networkd.service systemd-timesyncd.service systemd-firstboot.service; \

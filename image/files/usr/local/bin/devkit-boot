@@ -1,4 +1,9 @@
 #!/usr/local/bin/bb
+;; ONLY inside the dev VM. On any other machine this script would act on that machine's own programs
+;; (devkit-session ends window managers by name), so it stops at once unless podman's container mark is there.
+(when-not (.exists (java.io.File. "/run/.containerenv"))
+  (binding [*out* *err*] (println "this script runs inside the dev VM only"))
+  (System/exit 1))
 ;; Runs once at boot, as root, before the display and the IDE.
 ;; `bb vm:up` gives the container DEVKIT_WORK (the host's work folder, mounted at its own path) and
 ;; DEVKIT_DESKTOP. systemd does not hand its environment to services, so they are read from PID 1 here:
