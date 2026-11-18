@@ -53,15 +53,19 @@
   [f what]
   (fn [st] (if (= :running (:state st)) (f) (println (str "not possible: " what ", the VM is " (:words st))))))
 
+(def quiet
+  "Actions with one line of output: they run inside the menu, no pause."
+  #{"Stop the VM" "Open IntelliJ in the browser" "Start the podman machine"})
+
 (def actions
-  [["Start the VM (asks for the work and repos folders)" (fn [_] (start!))]
+  [["Start the VM (asks for folders)" (fn [_] (start!))]
    ["Stop the VM" (fn [_] (vm/down!))]
    ["Open IntelliJ in the browser" (guard open-browser! "no page to open")]
    ["Shell in the VM" (fn [st] (if (#{:running :starting :broken} (:state st)) (vm/shell!) (println "not possible: the VM is" (:words st))))]
    ["Logs" (fn [st] (if (#{:running :starting :broken} (:state st)) (vm/logs! []) (println "not possible: the VM is" (:words st))))]
    ["Build the image" (fn [_] (vm/build! []))]
-   ["Checkout a repository into /work" (fn [_] (when-let [n (not-empty (ask "repository name (/repos/NAME.git): "))] (vm/checkout! n)))]
-   ["Install corporate CAs (PEM files or a folder)" (fn [_] (when-let [f (not-empty (ask "paths, separated by spaces: "))] (vm/ca-install! (str/split f #"\s+"))))]
+   ["Checkout a repo into /work" (fn [_] (when-let [n (not-empty (ask "repository name (/repos/NAME.git): "))] (vm/checkout! n)))]
+   ["Install corporate CAs (PEM)" (fn [_] (when-let [f (not-empty (ask "paths, separated by spaces: "))] (vm/ca-install! (str/split f #"\s+"))))]
    ["Start the podman machine" (fn [_] (vm/machine-start!))]
    ["Quit" nil]])
 
@@ -74,7 +78,8 @@
   (println "\033[1mdevkit VM\033[0m\r\n\r")
   (println (str "  state    " (colour (:state st) (str/upper-case (name (:state st)))) "  " (:words st) "\r"))
   (when (= :running (:state st)) (println (str "  url      " (vm/url) "\r")))
-  (when (:units st) (println (str "  units    " (pr-str (:units st)) "   memory " (:mem st) "\r")))
+  (when (:units st) (println (str "  ide      " (get (:units st) "idea") ", display " (get (:units st) "xpra") "\r"))
+    (println (str "  memory   " (:mem st) "\r")))
   (case (:state st)
     :machine-stopped (println "  next     choose: Start the podman machine\r")
     :not-built (println "  next     choose: Build the image\r")
@@ -132,14 +137,20 @@
                 (#{:esc \q} k) nil
                 (= k :enter)
                 (let [[label f] (nth actions sel)]
-                  (when f
-                    (stty saved)
-                    (print "\033[H\033[J") (flush)
-                    (try (f @st)
-                         (catch Exception e (println "failed:" (ex-message e))))
-                    (print "\n[enter] back to the menu ") (flush) (read-line)
-                    (stty "-echo" "-icanon" "min" "0")
-                    (reset! st (probe-now)) (reset! last-probe (System/currentTimeMillis))
-                    (recur sel nil (str label ": done"))))
+                  (cond
+                    (nil? f) nil
+                    (quiet label)
+                    (do (render @st sel (str label " ..."))
+                        (let [o (with-out-str (try (f @st) (catch Exception e (println "failed:" (ex-message e)))))]
+                          (reset! st (probe-now)) (reset! last-probe (System/currentTimeMillis))
+                          (recur sel nil (last (remove str/blank? (str/split-lines o))))))
+                    :else
+                    (do (stty saved)
+                        (print "\033[H\033[J") (flush)
+                        (try (f @st) (catch Exception e (println "failed:" (ex-message e))))
+                        (print "\n[enter] back to the menu ") (flush) (read-line)
+                        (stty "-echo" "-icanon" "min" "0")
+                        (reset! st (probe-now)) (reset! last-probe (System/currentTimeMillis))
+                        (recur sel nil (str label ": done")))))
                 :else (recur sel view msg)))))
         (finally (restore) (println))))))
