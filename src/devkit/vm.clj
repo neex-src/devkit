@@ -149,12 +149,21 @@
 
 (declare ensure-subids!)
 
+(defn- detached
+  "The command, run in a session of its own. `podman machine start` leaves the machine's helpers (vfkit,
+  gvproxy) in the session of whoever started it: started from the menu, they died with the terminal the
+  menu ran in, and the machine and the VM with them. setsid where there is one (Linux), perl's on a Mac."
+  [cmd]
+  (cond (fs/which "setsid") (into ["setsid" "-w"] cmd)
+        (fs/which "perl") (into ["perl" "-MPOSIX" "-e" "POSIX::setsid(); exec @ARGV or die qq(exec: $!)" "--"] cmd)
+        :else cmd))
+
 (defn machine-start! []
   (let [m (machine)]
     (cond (nil? m) (fail "there is no podman machine; make one: podman machine init")
           (:running? m) (println "the podman machine is already running")
           :else (do (println "starting the podman machine (about a minute)")
-                    (sh "podman" "machine" "start")
+                    (apply sh (detached ["podman" "machine" "start"]))
                     (println "the podman machine is running")))))
 
 (defn machine-stop! []
@@ -274,6 +283,13 @@
     (doseq [c (ca-files)] (.update md (fs/read-all-bytes c)))
     (subs (apply str (map #(format "%02x" %) (.digest md))) 0 16)))
 
+(defn prune-old-images!
+  "Remove the images earlier builds left behind (untagged, with devkit's label): each is about 10 GB, and
+  the ID-mapped copy podman makes at the first start as much again. One still used by a running VM stays."
+  []
+  (run 600000 "podman" "image" "prune" "-f" "--filter" "label=devkit.inputs")
+  nil)
+
 (defn build!
   "Assemble <state>/ctx (Containerfile, files, plugins, CAs, IDE tarball) and build the image."
   [args]
@@ -294,6 +310,7 @@
         "--label" (str "devkit.inputs=" (inputs-hash zips))
         "--label" (str "devkit.plugins=" (str/join " " (map #(str/replace (str (fs/file-name %)) #"\.zip$" "") zips)))
         "-t" image ctx)
+    (prune-old-images!)
     (println "the image is built")))
 
 (defn image-info
@@ -315,7 +332,7 @@
 (defn answers?
   "True when the page really answers."
   []
-  (try (= 200 (:status (http/get (url) {:timeout 2000 :throw false})))
+  (try (= 200 (:status (http/get (url) {:timeout 4000 :throw false})))
        (catch Exception _ false)))
 
 (defn socket-path
@@ -382,7 +399,7 @@
                      {:state :stopped :words "not running" :machine m :containers cs}
                      {:state :not-built :words "the image is not built yet" :machine m :containers cs})
           (not= "running" (:state c))
-          {:state :stopped :words (str "stopped (the container is " (:state c) ", it was killed or crashed)")
+          {:state :stopped :words (str "stopped (podman says: " (:state c) ")")
            :machine m :containers cs}
           :else
           (let [in (future (inside)) ok (future (answers?))
@@ -421,6 +438,7 @@
         (fs/create-dirs ca-dir)
         (when-not (= state :starting)
           (out "podman" "rm" "-f" container)
+          (prune-old-images!)
           (println "work " work "(/work in the VM)")
           (println "repos" repos "(/repos in the VM)")
           (println "starting; the first start after a build copies the image and can take minutes")

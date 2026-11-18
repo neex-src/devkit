@@ -187,7 +187,7 @@
                          :menu [["restart the vm" {:run #(do (vm/down!) (vm/up! [])) :title "restarting the vm"}]
                                 ["logs" {:tty #(vm/logs! [])}]
                                 ["stop the vm" {:run vm/down! :title "stopping the vm"}]]})
-      (row "vm" (str (line (dim "○") "vm" "stopped" (when-not (= "not running" (:words s)) (:words s))) "  " (c "7" " start "))
+      (row "vm" (str (line (dim "○") "vm" "stopped" "") "  " (c "7" " start "))
            :hint "⏎ start the vm"
            :preview (str/join "\n" [(kv "state" (:words s))
                                     (kv "work" (home-rel (get-in s [:settings :work])))
@@ -436,9 +436,11 @@
                :else (row "s.podman" (line (green "●") "podman" (green "ready") "no podman machine needed here")
                           :hint "" :preview "On Linux podman needs no machine."))
              (hdr "i" "image")
-             (row "s.image" (line (cond (nil? i) (red "○") (:stale? i) (yellow "●") :else (green "●")) "image"
-                                  (cond (nil? i) "not built" (:stale? i) (yellow "outdated") :else (green "built"))
-                                  (when i (str (since (:created i)) " · " (gb (:size i)))))
+             (row "s.image" (if (#{:no-podman :no-machine :machine-stopped} (:state s))
+                              (line " " "image" "" "podman must run to look at it")
+                              (line (cond (nil? i) (red "○") (:stale? i) (yellow "●") :else (green "●")) "image"
+                                    (cond (nil? i) "not built" (:stale? i) (yellow "outdated") :else (green "built"))
+                                    (when i (str (since (:created i)) " · " (gb (:size i))))))
                   :hint (if i "⏎ build it again" "⏎ build it")
                   :preview (str "Arch Linux, IntelliJ IDEA " vm/idea-version ", the desktop, JDK 25 and 21, maven, node, git,\nterraform, podman, babashka, chromium.\n\n"
                                 (kv "plugins" (str/join "  " (or (:plugins i) (:zips s)))) "\n"
@@ -479,7 +481,7 @@
   (let [rs (get-in s [:aws :resources])]
     (if (empty? rs)
       [(row "aws.none" (dim "  nothing there yet") :hint "" :preview "")]
-      (let [w (reduce max 20 (for [r rs i (:items r)] (min 50 (count (:name i)))))]
+      (let [w (reduce max 20 (for [r rs i (:items r)] (min 40 (count (:name i)))))]
         (apply concat
                (for [{:keys [label region items]} rs]
                  (cons (hdr (str "aws." label "." region) (str label "  " region))
@@ -630,7 +632,10 @@
           (spit log (str sw))
           (if (:ok r)
             (assoc r :secs secs :last (last (tail 1)))
-            (do (draw (red "✗"))
+            (do (print "\033[H\033[2J")
+                (println (str "\n  " (red "✗") " " (bold title) "   " (dim (dur secs)) "\n"))
+                (doseq [l (tail 12) part (map #(apply str %) (partition-all (max 20 (- cols 6)) l))]
+                  (println (str "    " (dim part))))
                 (println (str "\n  " (red (str title ": " (:error r)))))
                 (println (dim (str "  the whole output: " (home-rel log))))
                 (print (str "\n  " (dim "⏎ back "))) (flush)
@@ -747,7 +752,8 @@
           (try (refresh!)
                (when-let [v (:showing @state)]
                  (http/post (str "http://127.0.0.1:" port) {:headers {"x-api-key" api-key} :timeout 2000 :throw false
-                                                               :body (str "reload(cat " (cache (str "rows." v)) ")+transform-header(cat " (cache (str "header." v)) ")+refresh-preview")}))
+                                                               ;; the header first: fzf drops a header change that comes after reload in one request
+                                                               :body (str "transform-header(cat " (cache (str "header." v)) ")+reload(cat " (cache (str "rows." v)) ")+refresh-preview")}))
                (catch Exception _))
           (recur))))
     (try
