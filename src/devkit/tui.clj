@@ -90,7 +90,8 @@
   (doseq [[i [label _]] (map-indexed vector actions)]
     (println (str (if (= i sel) "\033[7m > " "   ") label (if (= i sel) " \033[0m" "") "\r")))
   (println "\r")
-  (println (str "  arrows + enter, r refresh, q quit.  " (or msg "") "\r"))
+  (println "  arrows + enter, r refresh, q quit.\r")
+  (when msg (println (str "  " (subs msg 0 (min 56 (count msg))) "\r")))
   (flush))
 
 (defn- poll-key
