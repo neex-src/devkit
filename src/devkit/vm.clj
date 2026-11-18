@@ -25,8 +25,20 @@
 (def arm? (#{"aarch64" "arm64"} (System/getProperty "os.arch")))
 
 (defn sh
-  "Run a command, inherit output, throw on failure."
-  [& args] (-> (apply p/process {:inherit true} args) p/check) nil)
+  "Run a command, inherit output, throw (with the command in the message) on failure."
+  [& args]
+  (let [r @(apply p/process {:inherit true} args)]
+    (when-not (zero? (:exit r))
+      (throw (ex-info (str "command failed (exit " (:exit r) "): " (str/join " " (take 4 args)) " ...") {})))
+    nil))
+
+(defn cli
+  "Run a task function; a refused or failed action prints one line and exits 1, no stack trace."
+  [f & args]
+  (try (apply f args)
+       (catch clojure.lang.ExceptionInfo e
+         (binding [*out* *err*] (println "error:" (ex-message e)))
+         (System/exit 1))))
 
 (defn out
   "Run a command, return trimmed stdout, or nil when it fails."
@@ -143,61 +155,139 @@
       (out "systemctl" "--user" "start" "podman.socket"))
     s))
 
-(defn running? [] (= "true" (out "podman" "inspect" "-f" "{{.State.Running}}" container)))
-
-(defn url [] (str "http://127.0.0.1:" port "/"))
-
 (def repos-mount "/repos")
 (def default-repos (str root "/.scratch/repos"))
 (def work-volume "devkit-work")
+(def settings-file (str root "/.scratch/settings.edn"))
+
+(defn settings
+  "What `bb vm:up` or the menu chose last: {:work DIR-or-nil :repos DIR}."
+  []
+  (try (read-string (slurp settings-file)) (catch Exception _ {})))
+
+(defn save-settings! [m]
+  (fs/create-dirs (fs/parent settings-file))
+  (spit settings-file (pr-str (merge (settings) m))))
+
+(defn url [] (str "http://127.0.0.1:" port "/"))
+
+(defn answers?
+  "True when the page really answers."
+  [] (= "200" (out "curl" "-fsS" "-m" "2" "-o" "/dev/null" "-w" "%{http_code}" (url))))
+
+(defn machine-running? []
+  (some #{"true"} (some-> (out "podman" "machine" "list" "--format" "{{.Running}}") str/split-lines)))
+
+(defn container-state
+  "nil when there is no container, else podman's word (running, exited, ...). :error when podman does not answer."
+  []
+  (let [r (p/shell {:out :string :err :string :continue true} "podman" "container" "inspect" "-f" "{{.State.Status}}" container)]
+    (cond (zero? (:exit r)) (str/trim (:out r))
+          (re-find #"(?i)no such|no container|not found|does not exist" (:err r)) nil
+          :else :error)))
+
+(defn running? [] (= "running" (container-state)))
+
+(defn probe
+  "The truth about the VM now: {:state S :words TEXT ...}. S is one of
+  :no-podman :machine-stopped :not-built :stopped :starting :running :broken."
+  []
+  (cond
+    (and (machine?) (not (machine-running?)))
+    {:state :machine-stopped :words "the podman machine is stopped"}
+    :else
+    (let [cs (container-state)]
+      (cond
+        (= cs :error) {:state :no-podman :words "podman does not answer"}
+        (nil? cs) (if (out "podman" "image" "exists" image)
+                    {:state :stopped :words "stopped"}
+                    {:state :not-built :words "the image is not built yet"})
+        (not= cs "running") {:state :stopped :words (str "stopped (the container is " cs ", it was killed or crashed)")}
+        :else
+        (let [units (zipmap ["xpra" "idea"]
+                            (some-> (out "podman" "exec" container "systemctl" "is-active" "xpra" "idea") str/split-lines))
+              ok (answers?)
+              mem (out "podman" "stats" "--no-stream" "--format" "{{.MemUsage}}" container)]
+          (cond ok {:state :running :words "running" :units units :mem mem}
+                (every? #{"active"} (vals units)) {:state :starting :words "starting, the page does not answer yet" :units units :mem mem}
+                :else {:state :broken :words (str "BROKEN: the page does not answer, " (pr-str units)) :units units :mem mem}))))))
+
+(defn machine-start! []
+  (if (machine-running?)
+    (println "the podman machine is already running")
+    (do (println "starting the podman machine") (sh "podman" "machine" "start"))))
 
 (defn up!
-  "Start the VM (home volume, work folder, CA folder, host podman socket) and wait for the GUI."
+  "Start the VM (home volume, work folder, repos folder, CA folder, host podman socket) and wait for the page.
+  --work DIR and --repos DIR are remembered in .scratch/settings.edn. Already running: says so and does nothing."
   [args]
   (ensure-podman!)
-  (when-not (out "podman" "image" "exists" image) (throw (ex-info "no image; run bb vm:build" {})))
-  (let [work (if-let [w (opt args "--work" nil)] (str (fs/canonicalize (fs/create-dirs w))) work-volume)
-        repos (str (fs/canonicalize (fs/create-dirs (opt args "--repos" default-repos))))]
-    (fs/create-dirs ca-dir)
-    (when-not (running?)
-      (out "podman" "rm" "-f" container)
-      (sh "podman" "run" "-d" "--name" container "--hostname" "devkit"
-          "--systemd=always" "--userns=keep-id:uid=1000,gid=1000" "--user" "root"
-          "--security-opt" "label=disable" "--shm-size" "1g" "--network" "pasta:-T,4566,-T,5432,-T,8000-8999"
-          "-p" (str "127.0.0.1:" port ":" port)
-          "-v" (str home-volume ":/home/dev")
-          "-v" (str work ":/work")
-          "-v" (str repos ":" repos-mount)
-          "-v" (str ca-dir ":/ca:ro")
-          "-v" (str (socket-path) ":/run/user/1000/podman/podman.sock")
-          image))
-    (println "waiting for the GUI")
-    (loop [i 0]
-      (cond (some-> (out "curl" "-fsS" "-m" "3" "-o" "/dev/null" "-w" "%{http_code}" (url)) (= "200")) nil
-            (> i 60) (throw (ex-info "GUI did not come up; see bb vm:logs" {}))
-            :else (do (Thread/sleep 2000) (recur (inc i)))))
-    (println "open" (url))))
+  (let [w (opt args "--work" ::none) r (opt args "--repos" nil)]
+    (when (or (not= w ::none) r)
+      (save-settings! (cond-> {} (not= w ::none) (assoc :work w) r (assoc :repos r)))))
+  (when-not (out "podman" "image" "exists" image) (throw (ex-info "the image is not built; run bb vm:build (or Build in the menu)" {})))
+  (let [{:keys [state]} (probe)]
+    (if (= state :running)
+      (println "already running at" (url) "- nothing changed")
+      (let [s (settings)
+            work (if-let [w (:work s)] (str (fs/canonicalize (fs/create-dirs w))) work-volume)
+            repos (str (fs/canonicalize (fs/create-dirs (or (:repos s) default-repos))))]
+        (fs/create-dirs ca-dir)
+        (when-not (= state :starting)
+          (out "podman" "rm" "-f" container)
+          (println "work " (if (= work work-volume) "podman volume devkit-work" work) "-> /work")
+          (println "repos" repos "-> /repos")
+          (println "starting; the first start after a build copies the image and can take minutes")
+          (sh "podman" "run" "-d" "--name" container "--hostname" "devkit"
+              "--systemd=always" "--userns=keep-id:uid=1000,gid=1000" "--user" "root"
+              "--security-opt" "label=disable" "--shm-size" "1g" "--network" "pasta:-T,4566,-T,5432,-T,8000-8999"
+              "-p" (str "127.0.0.1:" port ":" port)
+              "-v" (str home-volume ":/home/dev")
+              "-v" (str work ":/work")
+              "-v" (str repos ":" repos-mount)
+              "-v" (str ca-dir ":/ca:ro")
+              "-v" (str (socket-path) ":/run/user/1000/podman/podman.sock")
+              image))
+        (println "waiting for the page")
+        (loop [i 0]
+          (cond (answers?) nil
+                (> i 90) (throw (ex-info "the page did not answer in 3 minutes; see bb vm:logs" {}))
+                :else (do (Thread/sleep 2000) (recur (inc i)))))
+        (println "open" (url))))))
 
-(defn down! []
+(defn down!
+  "Stop and remove the container (volumes stay). Says so when there is none."
+  []
   (ensure-podman!)
-  (out "podman" "stop" "-t" "30" container)
-  (out "podman" "rm" "-f" container)
-  (println "down (volume" home-volume "kept)"))
+  (if (nil? (container-state))
+    (println "already stopped - nothing to do")
+    (do (out "podman" "stop" "-t" "30" container)
+        (out "podman" "rm" "-f" container)
+        (println "stopped (home and work volumes kept)"))))
 
-(defn status! []
-  (ensure-podman!)
-  (if (running?)
-    (do (println "RUNNING" (url))
-        (println (out "podman" "exec" container "systemctl" "is-active" "xpra" "idea" "devkit-ca"))
-        (println "memory:" (out "podman" "stats" "--no-stream" "--format" "{{.MemUsage}}" container))
-        (println "work: " (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/work\"}}{{.Name}}{{.Source}}{{end}}{{end}}" container) "-> /work in the VM")
-        (println "repos:" (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/repos\"}}{{.Source}}{{end}}{{end}}" container) "-> /repos in the VM (bare repos, NAME.git)"))
-    (println "STOPPED")))
+(defn status!
+  "The true state, in words; the URL only when the page answers."
+  []
+  (let [{:keys [state words units mem]} (probe)]
+    (println (str/upper-case (name state)) "-" words)
+    (when (#{:running :starting :broken} state)
+      (when (= state :running) (println "url:   " (url)))
+      (println "units: " (pr-str units))
+      (println "memory:" mem)
+      (println "work:  " (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/work\"}}{{.Name}}{{.Source}}{{end}}{{end}}" container) "-> /work")
+      (println "repos: " (out "podman" "inspect" "-f" "{{range .Mounts}}{{if eq .Destination \"/repos\"}}{{.Source}}{{end}}{{end}}" container) "-> /repos"))
+    (case state
+      :machine-stopped (println "start it: bb vm (menu) or `podman machine start`")
+      :not-built (println "build it: bb vm:build")
+      :stopped (println "start it: bb vm:up")
+      nil)))
 
 (defn shell! []
+  (when-not (running?) (throw (ex-info "the VM is not running: start it first" {})))
   (sh "podman" "exec" "-it" "-u" "dev" "-w" "/work" container "bash" "-l"))
 
 (defn logs! [args]
+  (when-not (running?) (throw (ex-info "the VM is not running: start it first" {})))
   (apply sh "podman" "exec" container "journalctl" "-u" "idea" "-u" "xpra" "-u" "devkit-ca" "-n" "200" "--no-pager"
          (when (some #{"-f"} args) ["-f"])))
 
