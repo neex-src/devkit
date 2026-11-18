@@ -415,14 +415,16 @@
     (if (= state :running)
       (println "already running at" (url) "- nothing changed")
       (let [work (str (fs/canonicalize (fs/create-dirs (work-dir))))
-            repos (str (fs/canonicalize (fs/create-dirs (repos-dir))))]
+            repos (str (fs/canonicalize (fs/create-dirs (repos-dir))))
+            sock (socket-path)
+            usual "/run/user/1000/podman/podman.sock"]
         (fs/create-dirs ca-dir)
         (when-not (= state :starting)
           (out "podman" "rm" "-f" container)
           (println "work " work "(/work in the VM)")
           (println "repos" repos "(/repos in the VM)")
           (println "starting; the first start after a build copies the image and can take minutes")
-          (run-quiet! "the VM did not start"
+          (apply run-quiet! "the VM did not start"
                       "podman" "run" "-d" "--name" container "--hostname" "devkit"
               "--systemd=always" "--userns=keep-id:uid=1000,gid=1000" "--user" "root"
               "--security-opt" "label=disable" "--shm-size" "1g"
@@ -431,12 +433,16 @@
               "-p" (str "127.0.0.1:" port ":" port)
               "-e" (str "DEVKIT_WORK=" work)
               "-e" (str "DEVKIT_DESKTOP=" (desktop))
+              "-e" (str "DEVKIT_PODMAN_SOCK=" sock)
               "-v" (str home-volume ":/home/dev")
               "-v" (str work ":" work)
               "-v" (str repos ":" repos-mount)
               "-v" (str ca-dir ":/ca:ro")
-              "-v" (str (socket-path) ":/run/user/1000/podman/podman.sock")
-              image))
+              ;; the host's podman socket: at the usual rootless path, and at its own path on the host
+              ;; (on a Mac that is another one), for tools that hand the socket on to a container
+              (concat ["-v" (str sock ":" usual)]
+                      (when (not= sock usual) ["-v" (str sock ":" sock)])
+                      [image])))
         (wait-for-page!)
         (println "IntelliJ is at" (url))))))
 
