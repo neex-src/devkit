@@ -331,11 +331,13 @@
                             (when-not upstream? "no upstream")])]
     (if (seq parts) (str/join " · " parts) "clean")))
 
-(defn- branch-menu [{:keys [name branches remote-branches branch]}]
-  (let [remote-only (remove (set branches) (map #(str/replace % #"^origin/" "") remote-branches))]
-    {:menu (vec (concat (for [b branches :when (not= b branch)] [b {:run #(vm/git! name "switch" b) :title (str name ": " b)}])
-                        (for [b remote-only] [(str b (dim "  (on the host)")) {:run #(vm/git! name "switch" b) :title (str name ": " b)}])))
-     :title (str name ": switch from " branch " to")}))
+(defn- branch-menu
+  "The other branches of a repo in the VM as a list to switch to; nil when there is no other."
+  [{:keys [name branches remote-branches branch]}]
+  (let [remote-only (remove (set branches) (map #(str/replace % #"^origin/" "") remote-branches))
+        items (vec (concat (for [b branches :when (not= b branch)] [b {:run #(vm/git! name "switch" b) :title (str name ": switching to " b)}])
+                           (for [b remote-only] [(str b (dim "  (on the host)")) {:run #(vm/git! name "switch" b) :title (str name ": switching to " b)}])))]
+    (when (seq items) {:menu items :title (str name ": switch from " branch " to")})))
 
 (defn- work-rows [s]
   (let [rs (get-in s [:inside :work])]
@@ -354,12 +356,13 @@
                                       [["open in IntelliJ" {:quiet #(vm/open-in-ide! name)}]
                                        ["shell here" {:tty #(vm/shell! name)}]
                                        ["pull" {:run #(vm/git! name "pull" "--ff-only") :title (str "pulling " name)}]
-                                       (when (pos? ahead) [(str "push " (plural ahead "commit") " to the host") {:run #(vm/git! name "push" "origin" "HEAD") :title (str "pushing " name)}])
-                                       (when (< 1 (+ (count (:branches r)) (count (:remote-branches r)))) ["switch branch" (branch-menu r)])
+                                       (when (pos? ahead) [(str "push " (plural ahead "commit") " to the host") {:run #(vm/git! name "push" "origin" "HEAD") :title (str "pushing " name)
+                                                                                                 :done (str "pushed " (plural ahead "commit") " of " name " to the host")}])
+                                       (when-let [m (branch-menu r)] ["switch branch" m])
                                        ["remove from the vm" {:run #(vm/remove-repo! name) :title (str "removing " name)
                                                               :confirm (str "remove /work/" name " from the vm?"
                                                                             (when (or (pos? dirty) (pos? ahead))
-                                                                              (str " LOST: " (str/join ", " (remove nil? [(when (pos? dirty) (str dirty " changed files")) (when (pos? ahead) (plural ahead "unpushed commit"))])))))
+                                                                              (str " LOST: " (str/join ", " (remove nil? [(when (pos? dirty) (plural dirty "changed file")) (when (pos? ahead) (plural ahead "unpushed commit"))])))))
                                                               :yes-first (not (or (pos? dirty) (pos? ahead)))}]]))})))))
 
 (defn- available-rows [s]
@@ -430,7 +433,7 @@
                                      ["give it 8 CPUs and 16 GB" {:run #(vm/machine-resize! 8 16) :title "resizing the podman machine" :confirm "stop the podman machine (the vm and every container stop), resize, start?" :yes-first false}]
                                      ["stop the podman machine" {:run vm/machine-stop! :title "stopping the podman machine" :confirm "stop the podman machine? the vm and every container stop" :yes-first false}]]}
                              {:run vm/machine-start! :title "starting the podman machine"}))
-               :else (row "s.podman" (line (green "●") "podman" (green "ready") "runs containers on this machine itself, no podman machine")
+               :else (row "s.podman" (line (green "●") "podman" (green "ready") "no podman machine needed here")
                           :hint "" :preview "On Linux podman needs no machine."))
              (hdr "i" "image")
              (row "s.image" (line (cond (nil? i) (red "○") (:stale? i) (yellow "●") :else (green "●")) "image"
@@ -659,7 +662,7 @@
     (:run act) (when (or (nil? (:confirm act)) (confirm (:confirm act) (:yes-first act)))
                  (let [r (progress! (:title act) (:run act))]
                    (say! (:ok r) (if (:ok r)
-                                   (str (or (:last r) (:title act)) (when (< 2 (:secs r)) (dim (str "  · " (dur (:secs r))))))
+                                   (str (or (:done act) (:last r) (:title act)) (when (< 2 (:secs r)) (dim (str "  · " (dur (:secs r))))))
                                    (str (:title act) " failed: " (:error r))))
                    (when (and (:ok r) (:then-restart act) (vm/running?)
                               (confirm "restart the vm now, on the new image?" true))

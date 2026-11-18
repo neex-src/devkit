@@ -28,7 +28,9 @@
      :status (vec (take 15 st))
      :log (lines (g "log" "--color=always" log-format "-12"))
      :branches (lines (g "branch" "--format=%(refname:short)"))
-     :remote-branches (vec (remove #(str/ends-with? % "/HEAD") (lines (g "branch" "-r" "--format=%(refname:short)"))))}))
+     ;; origin/HEAD shows as "origin" in the short form: only names with a branch part
+     :remote-branches (vec (filter #(and (str/includes? % "/") (not (str/ends-with? % "/HEAD")))
+                                   (lines (g "branch" "-r" "--format=%(refname:short)"))))}))
 
 (defn bare-repo [d]
   (let [g (fn [& a] (apply sh d "git" a))]

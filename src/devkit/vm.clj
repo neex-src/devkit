@@ -67,6 +67,16 @@
         (throw (ex-info (str "command failed (exit " exit "): " (str/join " " (take 4 args)) " ...") {})))
       nil)))
 
+(declare run)
+
+(defn run-quiet!
+  "Run a command whose output says nothing (a container id); when it fails, throw WHAT and its last line."
+  [what & args]
+  (let [r (apply run 1800000 args)]
+    (when-not (zero? (:exit r))
+      (throw (ex-info (str what ": " (last (remove str/blank? (str/split-lines (str (:out r) (:err r)))))) {})))
+    nil))
+
 (defn tty
   "Run a command on the terminal (a shell, a pager); its exit code."
   [& args]
@@ -412,7 +422,8 @@
           (println "work " work "(/work in the VM)")
           (println "repos" repos "(/repos in the VM)")
           (println "starting; the first start after a build copies the image and can take minutes")
-          (sh "podman" "run" "-d" "--name" container "--hostname" "devkit"
+          (run-quiet! "the VM did not start"
+                      "podman" "run" "-d" "--name" container "--hostname" "devkit"
               "--systemd=always" "--userns=keep-id:uid=1000,gid=1000" "--user" "root"
               "--security-opt" "label=disable" "--shm-size" "1g"
               "--network" network
@@ -526,6 +537,7 @@
   [n]
   (repo-name! n)
   (need-running!)
+  (when-not (fs/directory? (str (repos-dir) "/" n ".git")) (fail "no repository" (str n ".git") "in" (repos-dir)))
   (vm-sh! (str "if [ -e '" n "/.git' ]; then echo 'already in the VM: /work/" n "'; "
                "else git clone -q /repos/" n ".git " n " && echo 'imported " n " into /work/" n "'; fi")))
 
