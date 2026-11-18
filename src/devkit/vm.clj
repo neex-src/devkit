@@ -200,7 +200,7 @@
       (cond
         (= cs :error) {:state :no-podman :words "podman does not answer"}
         (nil? cs) (if (out "podman" "image" "exists" image)
-                    {:state :stopped :words "stopped"}
+                    {:state :stopped :words "not running"}
                     {:state :not-built :words "the image is not built yet"})
         (not= cs "running") {:state :stopped :words (str "stopped (the container is " cs ", it was killed or crashed)")}
         :else
