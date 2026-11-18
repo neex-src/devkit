@@ -581,6 +581,15 @@
   (need-running!)
   (apply sh "podman" "exec" "-u" "dev" container "bash" "-lc" (in-work n "git \"$@\"") "git" args))
 
+(defn switch!
+  "Switch /work/NAME to BRANCH; the origin is fetched first, so a branch made on the host a moment ago is there."
+  [n branch]
+  (repo-name! n)
+  (need-running!)
+  (when-not (re-matches #"[A-Za-z0-9][A-Za-z0-9._/-]*" (str branch)) (fail "not a branch name:" (pr-str branch)))
+  (sh "podman" "exec" "-u" "dev" container "bash" "-lc"
+      (in-work n "git fetch -q origin && git switch \"$1\" 2>&1 && echo \"$0 is on $1\"") n branch))
+
 (defn open-in-ide!
   "Open /work/NAME as a project in the running IntelliJ."
   [n]
@@ -590,6 +599,15 @@
                container "bash" "-lc" (in-work n "exec /opt/idea/bin/idea.sh \"$PWD\""))]
     (when-not (zero? (:exit r)) (fail "IntelliJ did not take it:" (str/trim (:err r))))
     (println "IntelliJ opens" n)))
+
+(defn open-project!
+  "Open the folder PATH (inside the VM) as a project in the running IntelliJ."
+  [path]
+  (need-running!)
+  (let [r (run 30000 "podman" "exec" "-d" "-u" "dev" "-e" "DISPLAY=:100" "-e" "HOME=/home/dev"
+               container "bash" "-lc" "exec /opt/idea/bin/idea.sh \"$0\"" path)]
+    (when-not (zero? (:exit r)) (fail "IntelliJ did not take it:" (str/trim (:err r))))
+    (println "IntelliJ opens" (str (fs/file-name (fs/parent path))))))
 
 (defn hidden?
   "A repository the settings hide (:hide, a regex on the name)."
