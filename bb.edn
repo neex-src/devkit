@@ -1,12 +1,14 @@
 {:paths ["src"]
  :tasks
  {:requires ([devkit.vm :as vm] [devkit.tui :as tui])
-  vm        {:doc "Menu: state and actions" :task (tui/run!)}
-  vm:build   {:doc "Build the dev VM image. Opts: --plugins DIR (zips of IDE plugins)" :task (vm/cli vm/build! *command-line-args*)}
-  vm:up      {:doc "Start the dev VM and print its URL. Opts: --work DIR (bind a host folder as /work), --repos DIR (bare repos, mounted at /repos)" :task (vm/cli vm/up! *command-line-args*)}
-  vm:down    {:doc "Stop and remove the dev VM (volumes stay)" :task (vm/cli vm/down!)}
-  vm:checkout {:doc "Working copy /work/NAME from /repos/NAME.git" :task (vm/cli vm/checkout! (first *command-line-args*))}
-  vm:status  {:doc "Show state, URL, memory" :task (vm/cli vm/status!)}
+  vm         {:doc "The menu: what runs, what is mounted, the repos, one obvious next step" :task (tui/run!)}
+  vm:build   {:doc "Build the dev VM image. Opt: --plugins DIR (zips of IDE plugins)" :task (vm/cli vm/build! *command-line-args*)}
+  vm:up      {:doc "Start the dev VM and print its URL. Opts: --work DIR (host folder, /work in the VM), --repos DIR (bare repos, /repos in the VM), --desktop xfce|i3" :task (vm/cli vm/up! *command-line-args*)}
+  vm:down    {:doc "Stop and remove the dev VM (home and work folder stay)" :task (vm/cli vm/down!)}
+  vm:open    {:doc "Open IntelliJ's page in a browser" :task (vm/cli vm/open!)}
+  vm:import  {:doc "Working copy /work/NAME from /repos/NAME.git" :task (vm/cli vm/import! (first *command-line-args*))}
+  vm:desktop {:doc "The desktop on the display: xfce (default, every key reaches IntelliJ) or i3" :task (vm/cli vm/desktop! (first *command-line-args*))}
+  vm:status  {:doc "State, URL, memory, mounts, repos" :task (vm/cli vm/status!)}
   vm:shell   {:doc "Shell as user dev inside the VM" :task (vm/cli vm/shell!)}
-  vm:logs    {:doc "Journal of the IDE and xpra units. Opt: -f" :task (vm/cli vm/logs! *command-line-args*)}
+  vm:logs    {:doc "Journal of the IDE and the display. Opt: -f" :task (vm/cli vm/logs! *command-line-args*)}
   ca:install {:doc "Install corporate root CAs, FILE.pem or a folder, one or more: podman machine, image trust, Java stores" :task (vm/cli vm/ca-install! *command-line-args*)}}}

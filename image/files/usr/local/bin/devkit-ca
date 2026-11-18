@@ -1,4 +1,9 @@
 #!/usr/local/bin/bb
+;; ONLY inside the dev VM. On any other machine this script would act on that machine's own programs
+;; (devkit-session ends window managers by name), so it stops at once unless podman's container mark is there.
+(when-not (.exists (java.io.File. "/run/.containerenv"))
+  (binding [*out* *err*] (println "this script runs inside the dev VM only"))
+  (System/exit 1))
 ;; Copies every *.pem in /ca into the system trust anchors and rebuilds the
 ;; store. Arch's update-ca-trust also regenerates the Java cacerts that the
 ;; system JDK and IntelliJ's bundled JBR both point at. Chromium keeps its own

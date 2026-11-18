@@ -1,0 +1,41 @@
+#!/usr/local/bin/bb
+;; ONLY inside the dev VM. On any other machine this script would act on that machine's own programs
+;; (devkit-session ends window managers by name), so it stops at once unless podman's container mark is there.
+(when-not (.exists (java.io.File. "/run/.containerenv"))
+  (binding [*out* *err*] (println "this script runs inside the dev VM only"))
+  (System/exit 1))
+;; Runs once at boot, as root, before the display and the IDE.
+;; `bb vm:up` gives the container DEVKIT_WORK (the host's work folder, mounted at its own path) and
+;; DEVKIT_DESKTOP. systemd does not hand its environment to services, so they are read from PID 1 here:
+;; /work becomes a link to the work folder, and /run/devkit.env is what the units and login shells read.
+;; The Deliberator home lives in the work folder: containers started next to the VM mount files from it,
+;; and only a path that is the same on the host works for them.
+;; The same goes for the podman socket: a tool that hands the socket on to a container it starts (Floci
+;; starts its Lambda containers that way) names the path it knows. DEVKIT_PODMAN_SOCK is the socket's
+;; path on the host; it is mounted there in the VM too, CONTAINER_HOST points at it, and XDG_RUNTIME_DIR
+;; is the folder above it (on a Mac /run/user/501): tools that look for the rootless socket at
+;; $XDG_RUNTIME_DIR/podman/podman.sock then find, and hand on, the path that is true on the host.
+(require '[babashka.fs :as fs] '[babashka.process :refer [shell]] '[clojure.string :as str])
+(let [env (into {} (for [kv (str/split (slurp "/proc/1/environ") #"\u0000")
+                         :let [[k v] (str/split kv #"=" 2)] :when v] [k v]))
+      work (get env "DEVKIT_WORK")
+      host-work? (and (seq work) (fs/directory? work))
+      sock (get env "DEVKIT_PODMAN_SOCK")
+      sock (if (and (seq sock) (fs/exists? sock)) sock "/run/user/1000/podman/podman.sock")
+      runtime (or (second (re-matches #"(.*)/podman/podman\.sock" sock)) "/run/user/1000")]
+  (when (not= runtime "/run/user/1000")
+    ;; podman made these folders for the mount, as root: they are dev's runtime folder now
+    (shell {:continue true} "chown" "dev:dev" runtime (str runtime "/podman"))
+    (shell {:continue true} "chmod" "700" runtime))
+  (when host-work?
+    (when (and (fs/exists? "/work" {:nofollow-links true}) (not (fs/sym-link? "/work")))
+      (try (fs/delete "/work") (catch Exception _)))
+    (when-not (fs/sym-link? "/work") (fs/create-sym-link "/work" work)))
+  (spit "/run/devkit.env"
+        (str "DEVKIT_DESKTOP=" (get env "DEVKIT_DESKTOP" "xfce") "\n"
+             "DEVKIT_WORK=" (if host-work? work "/work") "\n"
+             "DELIBERATOR_HOME=" (if host-work? (str work "/.deliberator") "~/.deliberator") "\n"
+             "XDG_RUNTIME_DIR=" runtime "\n"
+             "CONTAINER_HOST=unix://" sock "\n"
+             "DOCKER_HOST=unix://" sock "\n"))
+  (println "devkit-boot: work" (if host-work? work "/work (no host folder)")))

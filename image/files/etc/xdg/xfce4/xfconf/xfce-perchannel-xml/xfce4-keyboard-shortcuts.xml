@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- No window-manager and no desktop shortcuts at all: every key belongs to the program in front
+     (IntelliJ's Alt+1..9, Alt+F7, Ctrl+Alt+Left, Alt+Insert ...). "override" = use only the custom list, and it is empty. -->
+<channel name="xfce4-keyboard-shortcuts" version="1.0">
+  <property name="commands" type="empty">
+    <property name="custom" type="empty">
+      <property name="override" type="bool" value="true"/>
+    </property>
+  </property>
+  <property name="xfwm4" type="empty">
+    <property name="custom" type="empty">
+      <property name="override" type="bool" value="true"/>
+    </property>
+  </property>
+</channel>

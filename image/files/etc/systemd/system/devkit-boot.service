@@ -1,0 +1,11 @@
+[Unit]
+Description=Work folder link and /run/devkit.env from the container's environment
+Before=xpra.service idea.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/devkit-boot
+
+[Install]
+WantedBy=multi-user.target
