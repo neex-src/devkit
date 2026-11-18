@@ -1,0 +1,103 @@
+# i3 for the dev VM: the basics of the user's own config, nothing machine-specific.
+#
+# Mod key: Mod1, the Alt / Option key (the left one). The browser client sends it unchanged.
+# Mod4 would be Cmd on a Mac, but Chrome and macOS take Cmd+letter before the page sees it (xpra
+# also swaps Cmd to Ctrl, which is what makes Cmd+C and Cmd+Alt+S work inside IntelliJ).
+# Cost: IntelliJ's Alt+1..9 tool-window keys now switch i3 workspaces. Alt+Enter stays IntelliJ's,
+# so the terminal is on Alt+Shift+Return and Alt+t instead of Alt+Return.
+set $mod   Mod1
+# movement keys: [ up   ; left   ' right   . down   (by keysym)
+set $up    0x5b
+set $left  0x3b
+set $right 0x27
+set $down  0x2e
+
+mouse_warping none
+focus_follows_mouse no
+font pango:JetBrainsMono 8
+default_border pixel 2
+client.focused #007000 #007000 #FFFFDD #007000 #007000
+
+bindsym $mod+1 workspace 1
+bindsym $mod+2 workspace 2
+bindsym $mod+3 workspace 3
+bindsym $mod+4 workspace 4
+bindsym $mod+5 workspace 5
+bindsym $mod+6 workspace 6
+bindsym $mod+7 workspace 7
+bindsym $mod+8 workspace 8
+bindsym $mod+9 workspace 9
+bindsym $mod+0 workspace 10
+bindsym $mod+Shift+1 move container to workspace 1
+bindsym $mod+Shift+2 move container to workspace 2
+bindsym $mod+Shift+3 move container to workspace 3
+bindsym $mod+Shift+4 move container to workspace 4
+bindsym $mod+Shift+5 move container to workspace 5
+bindsym $mod+Shift+6 move container to workspace 6
+bindsym $mod+Shift+7 move container to workspace 7
+bindsym $mod+Shift+8 move container to workspace 8
+bindsym $mod+Shift+9 move container to workspace 9
+bindsym $mod+Shift+0 move container to workspace 10
+
+bindsym $mod+$up          focus up
+bindsym $mod+$down        focus down
+bindsym $mod+$left        focus left
+bindsym $mod+$right       focus right
+bindsym $mod+Shift+$up    move up
+bindsym $mod+Shift+$down  move down
+bindsym $mod+Shift+$left  move left
+bindsym $mod+Shift+$right move right
+
+# Mac browsers turn Option+punctuation into other characters (Option+; is an ellipsis), so the
+# movement keys above do not arrive on a Mac. The arrow keys do, so they move too.
+bindsym $mod+Left   focus left
+bindsym $mod+Right  focus right
+bindsym $mod+Up     focus up
+bindsym $mod+Down   focus down
+bindsym $mod+Shift+Left  move left
+bindsym $mod+Shift+Right move right
+bindsym $mod+Shift+Up    move up
+bindsym $mod+Shift+Down  move down
+
+bindsym $mod+h split h
+bindsym $mod+v split v
+bindsym $mod+f fullscreen
+bindsym $mod+a focus parent
+bindsym $mod+e layout toggle split
+bindsym $mod+w layout tabbed
+bindsym $mod+s layout stacking
+
+floating_modifier $mod
+bindsym $mod+Ctrl+space floating toggle
+bindsym $mod+space focus mode_toggle
+
+bindsym $mod+r mode "resize"
+mode "resize" {
+    bindsym $up    resize grow   height 10 px or 10 ppt
+    bindsym $down  resize shrink height 10 px or 10 ppt
+    bindsym $left  resize grow   width  10 px or 10 ppt
+    bindsym $right resize shrink width  10 px or 10 ppt
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+
+bindsym $mod+Shift+c reload
+bindsym $mod+Shift+r restart
+bindsym $mod+Shift+q kill
+
+bindsym $mod+Shift+minus move scratchpad
+
+bindsym $mod+b bar mode toggle
+bar {
+  colors {
+    focused_workspace #007000 #007700 #FFFFFF
+  }
+  position top
+  status_command i3status
+  separator_symbol ::
+}
+
+bindsym $mod+Shift+Return exec xterm -fa 'JetBrains Mono' -fs 10 -bg '#101010' -fg '#DDDDDD'
+bindsym $mod+c      exec chromium
+bindsym $mod+d      exec --no-startup-id dmenu_run -p ' :: ' -sb '#177017' -sf '#DDDDDD'
+bindsym $mod+t exec xterm -fa 'JetBrains Mono' -fs 10 -bg '#101010' -fg '#DDDDDD'

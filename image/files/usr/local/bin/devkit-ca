@@ -1,10 +1,21 @@
 #!/usr/local/bin/bb
 ;; Copies every *.pem in /ca into the system trust anchors and rebuilds the
 ;; store. Arch's update-ca-trust also regenerates the Java cacerts that the
-;; system JDK and IntelliJ's bundled JBR both point at.
+;; system JDK and IntelliJ's bundled JBR both point at. Chromium keeps its own
+;; NSS database, so each certificate is added there for user dev as well.
 (require '[babashka.fs :as fs] '[babashka.process :refer [shell]])
-(let [pems (fs/glob "/ca" "*.pem")]
+(let [pems (fs/glob "/ca" "*.pem")
+      nss "sql:~/.pki/nssdb"
+      dev (fn [& cmd] (apply shell {:continue true :out :string :err :string} "runuser" "-u" "dev" "--" cmd))]
   (doseq [p pems]
     (fs/copy p (fs/path "/etc/ca-certificates/trust-source/anchors" (str (fs/file-name p))) {:replace-existing true}))
   (shell "update-ca-trust")
+  (when (seq pems)
+    (fs/create-dirs "~/.pki/nssdb")
+    (shell "chown" "-R" "dev:dev" "~/.pki")
+    (when-not (fs/exists? "~/.pki/nssdb/cert9.db")
+      (dev "certutil" "-d" nss "-N" "--empty-password"))
+    (doseq [p pems]
+      (dev "certutil" "-d" nss "-D" "-n" (str (fs/file-name p)))
+      (dev "certutil" "-d" nss "-A" "-t" "C,," "-n" (str (fs/file-name p)) "-i" (str p))))
   (println "devkit-ca:" (count pems) "pem(s) installed"))
