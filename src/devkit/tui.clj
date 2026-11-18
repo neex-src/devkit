@@ -144,7 +144,7 @@
                  (row "block" (str (yellow "▶") " " (bold "build the image"))
                       :hint "⏎ build it"
                       :preview (str "The VM's image is not built yet.\n\nArch Linux, IntelliJ IDEA " vm/idea-version ", the desktop, JDKs, git, terraform, podman.\n"
-                                    "About 6 minutes and 9 GB, once.\n\n" (kv "plugins" (str/join "  " (:zips s)))
+                                    "About 10 minutes and 13 GB, once.\n\n" (kv "plugins" (str/join "  " (:zips s)))
                                     "\n" (kv "CAs" (if (seq (:cas s)) (str/join "  " (:cas s)) "none")))
                       :act {:run #(vm/build! []) :title "building the image"}))
     nil))
@@ -445,7 +445,7 @@
                   :preview (str "Arch Linux, IntelliJ IDEA " vm/idea-version ", the desktop, JDK 25 and 21, maven, node, git,\nterraform, podman, babashka, chromium.\n\n"
                                 (kv "plugins" (str/join "  " (or (:plugins i) (:zips s)))) "\n"
                                 (kv "CAs" (if (seq (:cas s)) (str/join "  " (:cas s)) "none")) "\n\n"
-                                (dim "A build takes about 6 minutes the first time, less after."))
+                                (dim "A build takes about 10 minutes the first time, less after."))
                   :act (when (vm/podman?) {:run #(vm/build! []) :title "building the image" :then-restart true
                                            :confirm (when i "build the image again?") :yes-first true}))
              (row "s.plugins" (line2 "plugins" (if (seq (:zips s)) (str/join "  " (map #(str/replace % #"\.zip$" "") (:zips s))) (red "no zips")))
@@ -616,9 +616,11 @@
         frames "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         tail (fn [k] (->> (str/split (let [s (str sw)] (subs s (max 0 (- (count s) 8000)))) #"[\r\n]+")
                           (map plain) (remove str/blank?) (take-last k)))
+        ;; a build says STEP 8/18: shown beside the title
+        step (fn [] (when-let [[_ a b] (last (re-seq #"STEP (\d+)/(\d+)" (str sw)))] (str "step " a " of " b " · ")))
         draw (fn [mark]
                (print "\033[H")
-               (print (str "\033[K\n\033[K  " mark " " (bold title) "   " (dim (dur (quot (- (System/currentTimeMillis) t0) 1000))) "\n\033[K\n"))
+               (print (str "\033[K\n\033[K  " mark " " (bold title) "   " (dim (str (step) (dur (quot (- (System/currentTimeMillis) t0) 1000)))) "\n\033[K\n"))
                (doseq [l (tail n)] (print (str "\033[K    " (dim (cut l (- cols 6))) "\n")))
                (print "\033[J") (flush))]
     (print "\033[?1049h\033[H\033[2J\033[?25l") (flush)
@@ -753,7 +755,10 @@
                (when-let [v (:showing @state)]
                  (http/post (str "http://127.0.0.1:" port) {:headers {"x-api-key" api-key} :timeout 2000 :throw false
                                                                ;; the header first: fzf drops a header change that comes after reload in one request
-                                                               :body (str "transform-header(cat " (cache (str "header." v)) ")+reload(cat " (cache (str "rows." v)) ")+refresh-preview")}))
+                                                               :body (str "transform-header(cat " (cache (str "header." v)) ")"
+                                                                          ;; the row under the cursor may have changed what enter does
+                                                                          "+transform-preview-label(cat " (cache) "/{1}.hint 2>/dev/null)"
+                                                                          "+reload(cat " (cache (str "rows." v)) ")+refresh-preview")}))
                (catch Exception _))
           (recur))))
     (try
