@@ -35,8 +35,11 @@
                  [id (str/join " " title)])
           fresh (remove (comp seen first) wins)]
       (doseq [[id title] fresh
+              ;; a project window: IntelliJ gives it no window type at all; a dialog has one and belongs to a window
+              :let [props (:out (quiet "xprop" "-id" id "_NET_WM_WINDOW_TYPE" "WM_TRANSIENT_FOR"))]
               :when (and (not (str/starts-with? title "Welcome"))
-                         (str/includes? (:out (quiet "xprop" "-id" id "_NET_WM_WINDOW_TYPE")) "_NORMAL"))]
+                         (not (re-find #"_NET_WM_WINDOW_TYPE_(DIALOG|UTILITY|SPLASH|MENU|TOOLTIP|POPUP_MENU|DROPDOWN_MENU|NOTIFICATION)" props))
+                         (not (re-find #"WM_TRANSIENT_FOR\(WINDOW\)" props)))]
         (quiet "wmctrl" "-i" "-r" id "-b" "add,maximized_vert,maximized_horz"))
       (recur (into seen (map first fresh))))))
 
