@@ -600,6 +600,15 @@
     (when-not (zero? (:exit r)) (fail "IntelliJ did not take it:" (str/trim (:err r))))
     (println "IntelliJ opens" n)))
 
+(defn open-project!
+  "Open the folder PATH (inside the VM) as a project in the running IntelliJ."
+  [path]
+  (need-running!)
+  (let [r (run 30000 "podman" "exec" "-d" "-u" "dev" "-e" "DISPLAY=:100" "-e" "HOME=/home/dev"
+               container "bash" "-lc" "exec /opt/idea/bin/idea.sh \"$0\"" path)]
+    (when-not (zero? (:exit r)) (fail "IntelliJ did not take it:" (str/trim (:err r))))
+    (println "IntelliJ opens" (str (fs/file-name (fs/parent path))))))
+
 (defn hidden?
   "A repository the settings hide (:hide, a regex on the name)."
   [n]

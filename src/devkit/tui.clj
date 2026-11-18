@@ -388,6 +388,19 @@
              :act (when running
                     {:run #(vm/import! n) :title (str "importing " n) :confirm (str "import " n " into the vm?") :yes-first true}))))))
 
+(defn- workspace-rows
+  "Deliberator's workspaces in the VM: enter opens one in IntelliJ, where its tool window shows the estate."
+  [s]
+  (for [{:keys [name project repos]} (get-in s [:inside :workspaces])]
+    (row (str "ws." name)
+         (line2 name (str "deliberator workspace" (when (seq repos) (str "  ·  " (plural (count repos) "repo")))))
+         :hint "⏎ open in IntelliJ"
+         :preview (str/join "\n" (concat [(str (bold name) "  " (dim "a Deliberator workspace")) (dim project) ""
+                                          "Opened in IntelliJ, Deliberator's tool window shows its runtime, services,"
+                                          "AWS resources and scenarios." ""]
+                                         (when (seq repos) (cons (dim "attached repositories") repos))))
+         :act {:quiet #(vm/open-project! project)})))
+
 (defn- warning-rows [s]
   (remove nil?
           [(when (and (:image s) (:stale? (:image s)))
@@ -406,6 +419,7 @@
         tails (:tails s)
         body (concat [(hdr "m" "mounted")] (mount-rows s)
                      (when (seq (:siblings s)) (cons (hdr "c" "running next to the vm") (sibling-rows s tails)))
+                     (when (seq (get-in s [:inside :workspaces])) (cons (hdr "ws" "deliberator") (workspace-rows s)))
                      [(hdr "w" "repos in the vm")] (if (up? s) (work-rows s) [(row "w.off" (dim "   the vm is not running") :hint "" :preview "")])
                      [(hdr "a" "repos available")] (available-rows s))]
     (if b

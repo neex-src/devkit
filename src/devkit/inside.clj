@@ -4,6 +4,7 @@
 ;;   :memory  {:used BYTES :limit BYTES-or-nil}      :uptime SECONDS       :desktop "xfce"|"i3"
 ;;   :work    the working copies in /work   [{:name :branch :dirty :ahead :behind :last :status [..] :log [..] :branches [..]}]
 ;;   :repos   the bare repositories in /repos [{:name :branch :last :at :branches N :log [..]}]
+;;   :workspaces  Deliberator's workspaces that have an IDE project [{:name :project PATH :repos [..]}]
 (require '[babashka.fs :as fs] '[babashka.process :as p] '[clojure.string :as str])
 
 (defn sh [dir & cmd]
@@ -64,5 +65,11 @@
         :memory {:used (number-in "/sys/fs/cgroup/memory.current") :limit (number-in "/sys/fs/cgroup/memory.max")}
         :uptime (some-> (sh "/" "ps" "-o" "etimes=" "-p" "1") str/trim parse-long)
         :desktop desktop
+        :workspaces (let [home (or (second (re-find #"(?m)^DELIBERATOR_HOME=(.+)$" (try (slurp "/run/devkit.env") (catch Exception _ ""))))
+                                   "~/.deliberator")]
+                      (vec (for [d (dirs (str home "/workspaces") #(fs/directory? (fs/path % "project")))
+                                 :let [ws (try (read-string (slurp (str (fs/path d "workspace.edn")))) (catch Exception _ nil))]]
+                             {:name (str (fs/file-name d)) :project (str (fs/path d "project"))
+                              :repos (vec (sort (keep :name (:repositories ws))))})))
         :work (vec (pmap work-repo (dirs "/work" #(fs/exists? (fs/path % ".git")))))
         :repos (vec (pmap bare-repo (dirs "/repos" #(str/ends-with? (str %) ".git"))))}))
