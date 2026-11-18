@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+Comment=A shell in the work folder
+Exec=/usr/local/bin/devkit-terminal
+Icon=utilities-terminal
+Categories=System;TerminalEmulator;

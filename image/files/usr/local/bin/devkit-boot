@@ -1,0 +1,21 @@
+#!/usr/local/bin/bb
+;; Runs once at boot, as root, before the display and the IDE.
+;; `bb vm:up` gives the container DEVKIT_WORK (the host's work folder, mounted at its own path) and
+;; DEVKIT_DESKTOP. systemd does not hand its environment to services, so they are read from PID 1 here:
+;; /work becomes a link to the work folder, and /run/devkit.env is what the units and login shells read.
+;; The Deliberator home lives in the work folder: containers started next to the VM mount files from it,
+;; and only a path that is the same on the host works for them.
+(require '[babashka.fs :as fs] '[clojure.string :as str])
+(let [env (into {} (for [kv (str/split (slurp "/proc/1/environ") #"\u0000")
+                         :let [[k v] (str/split kv #"=" 2)] :when v] [k v]))
+      work (get env "DEVKIT_WORK")
+      host-work? (and (seq work) (fs/directory? work))]
+  (when host-work?
+    (when (and (fs/exists? "/work" {:nofollow-links true}) (not (fs/sym-link? "/work")))
+      (try (fs/delete "/work") (catch Exception _)))
+    (when-not (fs/sym-link? "/work") (fs/create-sym-link "/work" work)))
+  (spit "/run/devkit.env"
+        (str "DEVKIT_DESKTOP=" (get env "DEVKIT_DESKTOP" "xfce") "\n"
+             "DEVKIT_WORK=" (if host-work? work "/work") "\n"
+             "DELIBERATOR_HOME=" (if host-work? (str work "/.deliberator") "~/.deliberator") "\n"))
+  (println "devkit-boot: work" (if host-work? work "/work (no host folder)")))

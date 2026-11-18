@@ -1,0 +1,6 @@
+#!/usr/local/bin/bb
+;; The panel's terminal: a login shell in the work folder, by its real path (not the /work link), so a
+;; tool started there hands the host's podman paths that exist on the host.
+(require '[babashka.process :as p] '[babashka.fs :as fs])
+(let [d (or (System/getenv "DEVKIT_WORK") "/work")]
+  (p/shell {:dir (if (fs/directory? d) d "/home/dev") :continue true} "xfce4-terminal" "-x" "bash" "-l"))

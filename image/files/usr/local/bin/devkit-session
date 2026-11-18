@@ -1,0 +1,31 @@
+#!/usr/local/bin/bb
+;; The desktop on the xpra display, started by xpra as its child.
+;; xfce (the default): a window manager with NO keyboard shortcuts, so every key reaches IntelliJ, and a
+;; panel to start things with the mouse. i3: the author's tiling setup; it takes Alt+digits.
+;; Which one: /run/devkit/desktop when the menu wrote it, else DEVKIT_DESKTOP. The desktops run in a loop:
+;; the menu switches by writing the file and ending the running window manager; the IDE stays open.
+(require '[babashka.fs :as fs] '[babashka.process :as p] '[clojure.string :as str])
+
+(defn choice []
+  (let [f "/run/devkit/desktop"
+        d (str/trim (if (fs/exists? f) (slurp f) (or (System/getenv "DEVKIT_DESKTOP") "xfce")))]
+    (if (= d "i3") "i3" "xfce")))
+
+(defn quiet [& cmd] (apply p/shell {:continue true :out :string :err :string} cmd))
+
+(defn sweep []
+  (doseq [n ["xfwm4" "xfce4-panel" "xfsettingsd" "xfconfd" "i3" "i3bar" "i3status"]] (quiet "pkill" "-x" n)))
+
+(def xfce
+  ;; one dbus session for the parts; the window manager is the one waited for
+  "xsetroot -solid '#1e1f22'; xfsettingsd >/dev/null 2>&1 & xfce4-panel >/dev/null 2>&1 & exec xfwm4 --compositor=off")
+
+(loop []
+  (sweep)
+  (let [d (choice)]
+    (println "devkit-session:" d)
+    (if (= d "i3")
+      (p/shell {:continue true} "i3")
+      (p/shell {:continue true} "dbus-run-session" "--" "sh" "-c" xfce)))
+  (Thread/sleep 500)
+  (recur))

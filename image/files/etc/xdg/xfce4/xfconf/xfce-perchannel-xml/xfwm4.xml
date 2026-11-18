@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- easy_click none: Alt+click and Alt+drag stay IntelliJ's (multiple carets). One workspace, no compositor (xpra sends plain windows). -->
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="Materia-dark"/>
+    <property name="title_font" type="string" value="Noto Sans Bold 9"/>
+    <property name="button_layout" type="string" value="O|HMC"/>
+    <property name="easy_click" type="string" value="none"/>
+    <property name="use_compositing" type="bool" value="false"/>
+    <property name="workspace_count" type="int" value="1"/>
+    <property name="scroll_workspaces" type="bool" value="false"/>
+    <property name="wrap_workspaces" type="bool" value="false"/>
+    <property name="wrap_windows" type="bool" value="false"/>
+    <property name="click_to_focus" type="bool" value="true"/>
+    <property name="raise_on_click" type="bool" value="true"/>
+    <property name="focus_new" type="bool" value="true"/>
+    <property name="prevent_focus_stealing" type="bool" value="false"/>
+    <property name="activate_action" type="string" value="bring"/>
+    <property name="double_click_action" type="string" value="maximize"/>
+    <property name="mousewheel_rollup" type="bool" value="false"/>
+    <property name="snap_to_border" type="bool" value="true"/>
+    <property name="tile_on_move" type="bool" value="true"/>
+  </property>
+</channel>

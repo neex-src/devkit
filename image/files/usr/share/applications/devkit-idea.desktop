@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=IntelliJ IDEA
+Comment=Bring the IDE to the front (it always runs: systemd starts it again when it is closed)
+Exec=wmctrl -x -a jetbrains-idea
+Icon=/opt/idea/bin/idea.svg
+Categories=Development;IDE;

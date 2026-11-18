@@ -50,9 +50,17 @@ COPY plugins/ /opt/devkit/plugins/
 RUN ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts; \
     ln -sf /etc/ssl/certs/java/cacerts /opt/idea/jbr/lib/security/cacerts
 
+# The desktop (xfce parts, no session manager) and what real projects build with (JDK 21, node).
+# A late layer on purpose: changing it does not unpack the IDE again.
+RUN pacman -Syu --noconfirm --needed \
+      xfwm4 xfce4-panel xfce4-settings xfce4-terminal xfconf garcon exo thunar adwaita-icon-theme \
+      xorg-xsetroot xorg-xprop wmctrl dbus jdk21-openjdk nodejs npm \
+    && (pacman -S --noconfirm --needed materia-gtk-theme || echo "no dark theme package: the default look is used") \
+    && archlinux-java set java-25-openjdk && pacman -Scc --noconfirm
+
 COPY files/ /
-RUN set -e; chmod 755 /usr/local/bin/devkit-ca; \
-    systemctl enable xpra.service idea.service devkit-ca.service; \
+RUN set -e; chmod 755 /usr/local/bin/devkit-ca /usr/local/bin/devkit-boot /usr/local/bin/devkit-session /usr/local/bin/devkit-terminal; \
+    systemctl enable xpra.service idea.service devkit-ca.service devkit-boot.service; \
     systemctl mask getty.target console-getty.service systemd-logind.service systemd-networkd-wait-online.service \
       systemd-resolved.service systemd-networkd.service systemd-timesyncd.service systemd-firstboot.service; \
     mkdir -p /run/devkit; chown -R dev:dev /home/dev
