@@ -335,8 +335,8 @@
   "The other branches of a repo in the VM as a list to switch to; nil when there is no other."
   [{:keys [name branches remote-branches branch]}]
   (let [remote-only (remove (set branches) (map #(str/replace % #"^origin/" "") remote-branches))
-        items (vec (concat (for [b branches :when (not= b branch)] [b {:run #(vm/git! name "switch" b) :title (str name ": switching to " b)}])
-                           (for [b remote-only] [(str b (dim "  (on the host)")) {:run #(vm/git! name "switch" b) :title (str name ": switching to " b)}])))]
+        items (vec (concat (for [b branches :when (not= b branch)] [b {:run #(vm/switch! name b) :title (str name ": switching to " b)}])
+                           (for [b remote-only] [(str b (dim "  (on the host)")) {:run #(vm/switch! name b) :title (str name ": switching to " b)}])))]
     (when (seq items) {:menu items :title (str name ": switch from " branch " to")})))
 
 (defn- work-rows [s]

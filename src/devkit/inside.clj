@@ -28,9 +28,14 @@
      :status (vec (take 15 st))
      :log (lines (g "log" "--color=always" log-format "-12"))
      :branches (lines (g "branch" "--format=%(refname:short)"))
-     ;; origin/HEAD shows as "origin" in the short form: only names with a branch part
-     :remote-branches (vec (filter #(and (str/includes? % "/") (not (str/ends-with? % "/HEAD")))
-                                   (lines (g "branch" "-r" "--format=%(refname:short)"))))}))
+     ;; what the origin has NOW (a bare repo of the host, a folder here): the clone's own origin/* refs are as old as its
+     ;; last fetch, and a branch made on the host since would be missing. Elsewhere: those refs (origin/HEAD shows as
+     ;; "origin" in the short form, so only names with a branch part).
+     :remote-branches (let [origin (g "remote" "get-url" "origin")]
+                        (if (and origin (fs/directory? origin))
+                          (mapv #(str "origin/" %) (lines (sh origin "git" "branch" "--format=%(refname:short)")))
+                          (vec (filter #(and (str/includes? % "/") (not (str/ends-with? % "/HEAD")))
+                                       (lines (g "branch" "-r" "--format=%(refname:short)"))))))}))
 
 (defn bare-repo [d]
   (let [g (fn [& a] (apply sh d "git" a))]
