@@ -6,7 +6,7 @@ User=dev
 Environment=HOME=/home/dev XDG_RUNTIME_DIR=/run/devkit
 RuntimeDirectory=devkit
 RuntimeDirectoryPreserve=yes
-ExecStart=/usr/bin/xpra start-desktop :100 --daemon=no --html=on --bind-tcp=0.0.0.0:14500 --tcp-auth=none --mdns=no --pulseaudio=no --notifications=no --dbus-launch=no --systemd-run=no --start-child=openbox --exit-with-children=no --resize-display=yes --xvfb="Xvfb +extension Composite -screen 0 1920x1080x24+32 -nolisten tcp -noreset"
+ExecStart=/usr/bin/xpra start-desktop :100 --daemon=no --html=on --bind-tcp=0.0.0.0:14500 --tcp-auth=none --mdns=no --pulseaudio=no --notifications=no --dbus-launch=no --systemd-run=no --start-child=i3 --exit-with-children=no --resize-display=yes --xvfb="Xvfb +extension Composite -screen 0 1920x1080x24+32 -nolisten tcp -noreset"
 Restart=always
 RestartSec=2
 

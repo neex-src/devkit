@@ -17,7 +17,7 @@ RUN set -e; \
 RUN pacman -S --noconfirm --needed \
       systemd sudo git jdk25-openjdk maven clojure terraform podman \
       xpra xorg-server-xvfb xorg-xauth xorg-xkbcomp xkeyboard-config xdotool \
-      python-numpy python-cryptography python-dbus openbox \
+      python-numpy python-cryptography python-dbus i3-wm i3status dmenu xterm chromium nss ttf-jetbrains-mono \
       ttf-dejavu noto-fonts fontconfig libxtst libxi libxrender libxrandr libxkbfile alsa-lib \
       curl unzip tar tmux htop tree neovim less ripgrep jq openssh procps-ng iproute2 \
     && pacman -Scc --noconfirm
