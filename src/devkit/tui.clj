@@ -566,11 +566,14 @@
   "A short list: [[id label]..] -> the id picked, nil when left."
   [title items]
   (:id (fzf (str/join "\n" (for [[id label] items] (str id "\t\t  " label)))
-            "--exact" "--no-input" "--header" (str " " (bold "devkit") "   " (c "1;7" (str " " title " ")) "\n ") "--header-first"
-            "--footer" (dim "  ⏎ choose · esc back")
+            "--exact" "--header" (str " " (bold "devkit") "   " (c "1;7" (str " " title " ")) "\n ") "--header-first"
+            ;; a long list (branches) can be typed into; a short one takes no typing at all
+            (if (> (count items) 8)
+              ["--footer" (dim "  ⏎ choose · type to filter · esc back") "--bind" "change:first"]
+              ["--no-input" "--footer" (dim "  ⏎ choose · esc back") "--bind" "left:abort,q:abort"])
             (when *beside* ["--preview" (str "cat " *beside* " 2>/dev/null")
                             "--preview-window" (preview-window (let [[_ c] (term-size)] (>= c 120)))])
-            "--bind" "esc:abort,left:abort,q:abort")))
+            "--bind" "esc:abort")))
 
 (defn- confirm [question yes-first]
   (= "yes" (pick question (if yes-first [["yes" "yes"] ["no" "no"]] [["no" "no"] ["yes" "yes"]]))))
