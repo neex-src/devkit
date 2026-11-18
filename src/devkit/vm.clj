@@ -56,10 +56,11 @@
   [] (boolean (some-> (out "podman" "machine" "list" "--format" "{{.Name}}") not-empty)))
 
 (declare ensure-subids!)
+(declare machine-start!)
 (defn ensure-podman! []
   (when-not (out "podman" "info")
     (if (machine?)
-      (do (println "starting podman machine") (sh "podman" "machine" "start"))
+      (machine-start!)
       (throw (ex-info "podman does not answer" {}))))
   (ensure-subids!))
 
@@ -208,14 +209,15 @@
                             (some-> (out "podman" "exec" container "systemctl" "is-active" "xpra" "idea") str/split-lines))
               ok (answers?)
               mem (out "podman" "stats" "--no-stream" "--format" "{{.MemUsage}}" container)]
-          (cond ok {:state :running :words "running" :units units :mem mem}
+          (cond ok {:state :running :words "the page answers" :units units :mem mem}
                 (every? #{"active"} (vals units)) {:state :starting :words "starting, the page does not answer yet" :units units :mem mem}
                 :else {:state :broken :words (str "BROKEN: the page does not answer, " (pr-str units)) :units units :mem mem}))))))
 
 (defn machine-start! []
   (if (machine-running?)
     (println "the podman machine is already running")
-    (do (println "starting the podman machine") (sh "podman" "machine" "start"))))
+    (do (println "starting the podman machine (a minute)")
+        (if (out "podman" "machine" "start") (println "the podman machine is running") (throw (ex-info "the podman machine did not start; try `podman machine start` yourself" {}))))))
 
 (defn up!
   "Start the VM (home volume, work folder, repos folder, CA folder, host podman socket) and wait for the page.
@@ -258,8 +260,7 @@
 (defn down!
   "Stop and remove the container (volumes stay). Says so when there is none."
   []
-  (ensure-podman!)
-  (if (nil? (container-state))
+  (if (or (and (machine?) (not (machine-running?))) (nil? (container-state)))
     (println "already stopped - nothing to do")
     (do (out "podman" "stop" "-t" "30" container)
         (out "podman" "rm" "-f" container)
