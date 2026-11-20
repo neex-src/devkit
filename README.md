@@ -1,5 +1,7 @@
 # devkit
 
+All the code here is written by AI (Claude Code) and has not been reviewed.
+
 A dev machine in one Podman container: Linux (Arch) with IntelliJ IDEA inside, shown in your
 browser. IntelliJ, its plugins and everything you start from it run in the container, not on your
 Mac with your rights. The image comes with the Deliberator and Inline Reading Mode plugins
@@ -89,6 +91,5 @@ without tabs and address bar.
 - The container gets the Podman socket, so the tools in it can start containers next to it. That
   is what Deliberator needs. It also means the container is not a closed box.
 
-A locked down mode (no network, no Podman socket, repos read only) is easy to add if that is
-what someone needs. In that mode IntelliJ, the plugins and reus work; Deliberator's containers do
-not.
+A locked down mode (no network, no Podman socket, repos read only) does not exist yet; it can be
+added. In that mode IntelliJ, the plugins and reus would work; Deliberator's containers would not.
